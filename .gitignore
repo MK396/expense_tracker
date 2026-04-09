@@ -1,0 +1,16 @@
+# Python / Django
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+db.sqlite3
+.env
+
+# Vue / Vite / Node
+node_modules/
+dist/
+npm-debug.log*
+
+# Systemowe
+.DS_Store
+.vscode/
