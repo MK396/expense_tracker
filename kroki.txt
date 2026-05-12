@@ -85,6 +85,8 @@ urlpatterns = [
 
 # następnie zarejestrowac w glownym pliku urls.py
 
+
+
 ----------------------------------------------------------------------
                     PODSUMOWANIE
 1. Baza danych i Modele

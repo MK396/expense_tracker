@@ -2,52 +2,67 @@
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
 
-// 1. Reaktywna zmienna na wydatki
-const expenses = ref([])
+// Importy komponentów
+import AppHeader from './components/AppHeader.vue'
+import ExpenseStats from './components/ExpenseStats.vue'
+import ExpenseList from './components/ExpenseList.vue'
+import ExpenseForm from './components/ExpenseForm.vue'
+import BaseModal from './components/BaseModal.vue'
 
-// 2. Funkcja pobierająca dane z Django
+// Stan aplikacji
+const expenses = ref([])
+const isDark = ref(false)
+const showForm = ref(false)
+
+// Logika motywu
+const toggleTheme = () => {
+  isDark.value = !isDark.value
+  document.documentElement.setAttribute('data-theme', isDark.value ? 'dark' : 'light')
+}
+
+// Logika danych
 const fetchExpenses = async () => {
   try {
-    const response = await axios.get('http://127.0.0.1:8000/api/expenses/')
-    expenses.value = response.data
+    const { data } = await axios.get('http://127.0.0.1:8000/api/expenses/')
+    expenses.value = data
   } catch (error) {
-    console.error("Błąd pobierania:", error)
-    alert("Nie udało się połączyć z API Django!")
+    console.error("Błąd:", error)
   }
 }
 
-// 3. Uruchom pobieranie, gdy strona się załaduje
-onMounted(() => {
+const handleExpenseAdded = () => {
   fetchExpenses()
-})
+  showForm.value = false
+}
+
+onMounted(fetchExpenses)
 </script>
 
 <template>
   <div class="container">
-    <h1>Mój Tracker Wydatków</h1>
+    <AppHeader 
+      :is-dark="isDark" 
+      :show-form="showForm"
+      @toggle-theme="toggleTheme"
+      @toggle-form="showForm = !showForm"
+    />
+
+    <ExpenseStats :expenses="expenses" />
     
-    <div v-if="expenses.length === 0">Ładowanie wydatków lub brak danych...</div>
-    
-    <table v-else border="1">
-      <thead>
-        <tr>
-          <th>Nazwa</th>
-          <th>Kwota</th>
-          <th>Kategoria</th>
-          <th>Data</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="expense in expenses" :key="expense.id">
-          <td>{{ expense.name }}</td>
-          <td>{{ expense.amount }} zł</td>
-          <td>{{ expense.category }}</td>
-          <td>{{ expense.date }}</td>
-        </tr>
-      </tbody>
-    </table>
+    <ExpenseList :expenses="expenses" />
+
+    <BaseModal :show="showForm" @close="showForm = false">
+      <ExpenseForm @expense-added="handleExpenseAdded" />
+    </BaseModal>
   </div>
 </template>
 
 <style>
+/* Tu zostaw tylko globalne style kontenera */
+.container {
+  width: 100%;           /* Zajmij 100% szerokości */
+  max-width: 100%;       /* Usuń ograniczenie do 1000px */
+  padding: 0 40px;       /* Zostaw tylko lekki margines wewnętrzny, żeby treść nie dotykała krawędzi ekranu */
+  box-sizing: border-box; /* Ważne: zapobiega wychodzeniu poza ekran przy paddingu */
+}
 </style>
