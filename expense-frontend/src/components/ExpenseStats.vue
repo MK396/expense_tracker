@@ -1,31 +1,3 @@
-<template>
-  <div class="stats-container">
-    <div class="card">
-      <div class="card-icon">💰</div>
-      <div class="card-info">
-        <h3>Suma całkowita</h3>
-        <p>{{ totalAmount }} zł</p>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-icon">📅</div>
-      <div class="card-info">
-        <h3>W tym miesiącu</h3>
-        <p>{{ monthlyAmount }} zł</p>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-icon">📊</div>
-      <div class="card-info">
-        <h3>Liczba wpisów</h3>
-        <p>{{ expenses.length }}</p>
-      </div>
-    </div>
-  </div>
-</template>
-
 <script setup>
 import { computed } from 'vue';
 
@@ -61,6 +33,34 @@ const monthlyAmount = computed(() => {
 });
 </script>
 
+<template>
+  <div class="stats-container">
+    <div class="card">
+      <div class="card-icon">💰</div>
+      <div class="card-info">
+        <h3>Suma całkowita</h3>
+        <p>{{ totalAmount }} zł</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-icon">📅</div>
+      <div class="card-info">
+        <h3>W tym miesiącu</h3>
+        <p>{{ monthlyAmount }} zł</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-icon">📊</div>
+      <div class="card-info">
+        <h3>Liczba wpisów</h3>
+        <p>{{ expenses.length }}</p>
+      </div>
+    </div>
+  </div>
+</template>
+
 <style scoped>
 .stats-container {
   display: grid;
@@ -70,14 +70,12 @@ const monthlyAmount = computed(() => {
 }
 
 .card {
-  background: white; /* Jeśli masz dark mode, zmień na zmienną lub ciemny kolor */
+  background: rgb(182, 182, 182);
   padding: 1.5rem;
   border-radius: 16px;
   display: flex;
   align-items: center;
   gap: 1rem;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  border-left: 6px solid #a855f7; /* Kolor fioletowy z Twojego przycisku */
   transition: transform 0.2s;
 }
 
@@ -87,7 +85,6 @@ const monthlyAmount = computed(() => {
 
 .card-icon {
   font-size: 2rem;
-  background: #f3e8ff;
   padding: 10px;
   border-radius: 12px;
 }
@@ -107,14 +104,4 @@ const monthlyAmount = computed(() => {
   color: #1f2937;
 }
 
-/* Dostosowanie pod Dark Mode (opcjonalnie) */
-@media (prefers-color-scheme: dark) {
-  .card {
-    background: #1f2937;
-    border-left-color: #a855f7;
-  }
-  .card-info h3 { color: #9ca3af; }
-  .card-info p { color: #f9fafb; }
-  .card-icon { background: #374151; }
-}
 </style>

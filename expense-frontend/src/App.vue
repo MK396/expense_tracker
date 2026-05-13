@@ -2,12 +2,13 @@
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
 
-// Importy komponentów
+// Komponenty
 import AppHeader from './components/AppHeader.vue'
 import ExpenseStats from './components/ExpenseStats.vue'
 import ExpenseList from './components/ExpenseList.vue'
 import ExpenseForm from './components/ExpenseForm.vue'
 import BaseModal from './components/BaseModal.vue'
+import ExpenseCharts from './components/ExpenseCharts.vue'
 
 // Stan aplikacji
 const expenses = ref([])
@@ -49,6 +50,8 @@ onMounted(fetchExpenses)
 
     <ExpenseStats :expenses="expenses" />
     
+    <ExpenseCharts :expenses="expenses" />
+
     <ExpenseList :expenses="expenses" />
 
     <BaseModal :show="showForm" @close="showForm = false">
@@ -58,11 +61,10 @@ onMounted(fetchExpenses)
 </template>
 
 <style>
-/* Tu zostaw tylko globalne style kontenera */
 .container {
-  width: 100%;           /* Zajmij 100% szerokości */
-  max-width: 100%;       /* Usuń ograniczenie do 1000px */
-  padding: 0 40px;       /* Zostaw tylko lekki margines wewnętrzny, żeby treść nie dotykała krawędzi ekranu */
-  box-sizing: border-box; /* Ważne: zapobiega wychodzeniu poza ekran przy paddingu */
+  width: 100%;
+  max-width: 100%;
+  padding: 0 40px;
+  box-sizing: border-box;
 }
 </style>

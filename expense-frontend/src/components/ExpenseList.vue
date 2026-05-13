@@ -1,37 +1,74 @@
 <script setup>
-// Definiujemy, że ten komponent oczekuje tablicy pod nazwą 'expenses'
 defineProps(['expenses'])
 </script>
 
 <template>
-  <table border="1">
-    <thead>
-      <tr>
-        <th>Nazwa</th>
-        <th>Kwota</th>
-        <th>Kategoria</th>
-        <th>Data</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr v-for="expense in expenses" :key="expense.id">
-        <td>{{ expense.name }}</td>
-        <td>{{ expense.amount }} zł</td>
-        <td>{{ expense.category }}</td>
-        <td>{{ expense.date }}</td>
-      </tr>
-    </tbody>
-  </table>
+  <div class="expenses-container">
+    <div v-for="expense in expenses" :key="expense.id" class="expense-card">
+      <div class="card-header">
+        <span class="expense-name">{{ expense.name }}</span>
+        <span class="expense-amount">{{ expense.amount }} zł</span>
+      </div>
+      
+      <div class="card-body">
+        <span class="expense-category">{{ expense.category }}</span>
+        <span class="expense-date">{{ expense.date }}</span>
+      </div>
+    </div>
+  </div>
 </template>
 
 <style scoped>
-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 20px;
+.expenses-container {
+  display: grid;
+  /* Tworzy siatkę: karty będą miały min. 300px, dopasują się do szerokości ekranu */
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+  padding: 20px 0;
 }
-th, td {
-  padding: 10px;
-  text-align: left;
+
+.expense-card {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 15px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  transition: transform 0.2s;
+}
+
+.expense-card:hover {
+  transform: translateY(-5px);
+  border-color: #42b883; /* Kolor Vue dla akcentu */
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.expense-name {
+  font-weight: bold;
+  font-size: 1.1rem;
+}
+
+.expense-amount {
+  color: #2c3e50;
+  font-weight: 800;
+}
+
+.card-body {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.expense-category {
+  background: #f0f0f0;
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-transform: lowercase;
 }
 </style>

@@ -5,11 +5,26 @@ import axios from 'axios'
 const emit = defineEmits(['expense-added'])
 const getTodayDate = () => new Date().toISOString().split('T')[0]
 
-const categories = ['Jedzenie', 'Transport', 'Rozrywka', 'Mieszkanie', 'Inne']
+// Zamieniamy na ref, aby tablica była reaktywna
+const categories = ref(['Jedzenie', 'Transport', 'Rozrywka', 'Mieszkanie', 'Inne'])
+const newCategoryName = ref('')
+const showAddCategory = ref(false)
+
 const name = ref('')
 const amount = ref('')
 const category = ref('Jedzenie')
 const date = ref(getTodayDate())
+
+// Funkcja dodawania nowej kategorii do listy
+const addNewCategory = () => {
+  const trimmed = newCategoryName.value.trim()
+  if (trimmed && !categories.value.includes(trimmed)) {
+    categories.value.push(trimmed)
+    category.value = trimmed // Automatycznie wybierz nową kategorię
+    newCategoryName.value = ''
+    showAddCategory.value = false
+  }
+}
 
 const handleSubmit = async () => {
   if (!name.value || !amount.value) return alert("Wypełnij wszystkie pola!")
@@ -38,86 +53,114 @@ const handleSubmit = async () => {
     <input v-model="amount" type="number" placeholder="Kwota" />
     <input v-model="name" type="text" placeholder="Nazwa wydatku" />
     <input v-model="date" type="date" class="date-input" @click="$event.target.showPicker?.()" />
-    <div class="category-picker">
-        <button 
-        v-for="cat in categories" 
-        :key="cat"
-        type="button"
-        :class="['category-btn', { active: category === cat }]"
-        @click="category = cat"
-        >
-        {{ cat }}
-        </button>
+    
+    <div class="category-section">
+      <label>Kategoria:</label>
+      <div class="category-picker">
+          <button 
+            v-for="cat in categories" 
+            :key="cat"
+            type="button"
+            :class="['category-btn', { active: category === cat }]"
+            @click="category = cat"
+          >
+            {{ cat }}
+          </button>
+          
+          <!-- Przycisk otwierający pole dodawania -->
+          <button 
+            v-if="!showAddCategory"
+            type="button" 
+            class="category-btn add-btn" 
+            @click="showAddCategory = true"
+          >
+            + Nowa
+          </button>
+      </div>
+
+      <!-- Ukryte pole dodawania nowej kategorii -->
+      <div v-if="showAddCategory" class="add-category-input">
+        <input 
+          v-model="newCategoryName" 
+          type="text" 
+          placeholder="Nazwa kategorii..." 
+          @keyup.enter="addNewCategory"
+        />
+        <button type="button" @click="addNewCategory">Dodaj</button>
+        <button type="button" class="cancel-btn" @click="showAddCategory = false">✕</button>
+      </div>
     </div>
-    <button @click="handleSubmit">Dodaj +</button>
+
+    <button class="submit-btn" @click="handleSubmit">Dodaj Wydatek +</button>
   </div>
 </template>
 
 <style scoped>
-.form-container {
-  /* Używamy zmiennej --code-bg jako tła panelu */
+/* Zachowujemy Twoje style i dodajemy poprawki dla kategorii */
 
-  background: var(--code-bg);
-  padding: 20px;
-  border-radius: 12px;
+.category-section {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  margin-bottom: 24px;
-  border: 1px solid var(--border);
-  transition: all 0.3s ease;
+  gap: 8px;
 }
 
-input, select {
-  background: var(--bg);
-  color: var(--text-h);
-  padding: 10px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  font-family: var(--sans);
-  flex: 1;
-}
-
-/* Styl dla placeholderów, żeby zmieniały kolor w Dark Mode */
-input::placeholder {
+.category-section label {
+  font-size: 0.9rem;
   color: var(--text);
-  opacity: 0.6;
-}
-
-button {
-  background-color: var(--accent);
-  color: #fff;
-  padding: 10px 20px;
-  border-radius: 6px;
-  border: none;
-  cursor: pointer;
   font-weight: 600;
-  font-family: var(--heading);
-  transition: transform 0.1s, opacity 0.2s;
-}
-
-button:hover {
-  opacity: 0.9;
-}
-
-button:active {
-  transform: scale(0.98);
-}
-
-.date-input {
-  background: var(--bg);
-  color: var(--text-h);
-  padding: 10px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  font-family: var(--sans);
 }
 
 .category-picker {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin: 10px 0;
+}
+
+.add-btn {
+  border: 1px dashed var(--accent) !important;
+  color: var(--accent) !important;
+  background: transparent !important;
+}
+
+.add-category-input {
+  display: flex;
+  gap: 8px;
+  margin-top: 5px;
+  animation: fadeIn 0.3s ease;
+}
+
+.cancel-btn {
+  background: #ff7675 !important;
+}
+
+.submit-btn {
+  margin-top: 10px;
+  background-color: var(--accent);
+  font-size: 1.1rem;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Reszta Twoich stylów ... */
+.form-container {
+  background: var(--code-bg);
+  padding: 20px;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid var(--border);
+}
+
+input {
+  background: var(--bg);
+  color: var(--text-h);
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
 }
 
 .category-btn {
@@ -125,36 +168,13 @@ button:active {
   color: var(--text);
   border: 1px solid var(--border);
   padding: 8px 16px;
-  border-radius: 20px; /* Zaokrąglone przyciski typu "pills" */
+  border-radius: 20px;
   cursor: pointer;
   font-size: 14px;
-  transition: all 0.2s ease;
-  flex-grow: 1; /* Przyciski wypełnią szerokość */
 }
 
-/* Styl dla aktywnego (wybranego) przycisku */
 .category-btn.active {
   background-color: var(--accent);
   color: white;
-  border-color: var(--accent);
-  box-shadow: var(--shadow);
-}
-
-.category-btn:hover:not(.active) {
-  border-color: var(--accent);
-}
-
-
-/* W niektórych przeglądarkach ikonka kalendarza jest ciemna, 
-   można ją odwrócić w trybie ciemnym */
-[data-theme='dark'] .date-input::-webkit-calendar-picker-indicator {
-  filter: invert(1);
-}
-
-/* RWD - na telefonach formularz będzie w pionie */
-@media (max-width: 600px) {
-  .form-container {
-    flex-direction: column;
-  }
 }
 </style>
