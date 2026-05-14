@@ -9,7 +9,7 @@ import {
   Title 
 } from 'chart.js'
 
-// Rejestracja niezbędnych modułów Chart.js
+
 ChartJS.register(ArcElement, Tooltip, Legend, Title)
 
 const props = defineProps({
@@ -20,7 +20,6 @@ const props = defineProps({
   }
 })
 
-// Logika przetwarzania danych z listy wydatków na format akceptowany przez Chart.js
 const chartData = computed(() => {
   const categoriesMap = {}
 
@@ -57,7 +56,6 @@ const chartData = computed(() => {
   }
 })
 
-// Opcje konfiguracji wyglądu wykresu
 const chartOptions = {
   responsive: true,
   maintainAspectRatio: false,
@@ -106,7 +104,7 @@ const chartOptions = {
 }
 
 .canvas-wrapper {
-  height: 350px; /* Możesz dostosować wysokość */
+  height: 350px;
   position: relative;
 }
 
@@ -121,7 +119,6 @@ const chartOptions = {
   border-radius: 12px;
 }
 
-/* Dostosowanie do trybu ciemnego, jeśli używasz data-theme="dark" */
 :global([data-theme='dark']) .chart-container {
   background: #2d2d2d;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);

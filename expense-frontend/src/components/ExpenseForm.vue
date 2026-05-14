@@ -1,38 +1,64 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import axios from 'axios'
 
 const emit = defineEmits(['expense-added'])
-const getTodayDate = () => new Date().toISOString().split('T')[0]
 
-// Zamieniamy na ref, aby tablica była reaktywna
-const categories = ref(['Jedzenie', 'Transport', 'Rozrywka', 'Mieszkanie', 'Inne'])
+// Stan formularza
+const name = ref('')
+const amount = ref('')
+const category = ref('')
+const date = ref(new Date().toISOString().split('T')[0])
+
+const categories = ref([])
 const newCategoryName = ref('')
 const showAddCategory = ref(false)
 
-const name = ref('')
-const amount = ref('')
-const category = ref('Jedzenie')
-const date = ref(getTodayDate())
-
-// Funkcja dodawania nowej kategorii do listy
-const addNewCategory = () => {
-  const trimmed = newCategoryName.value.trim()
-  if (trimmed && !categories.value.includes(trimmed)) {
-    categories.value.push(trimmed)
-    category.value = trimmed // Automatycznie wybierz nową kategorię
-    newCategoryName.value = ''
-    showAddCategory.value = false
+// 1. Pobieranie kategorii z API przy montowaniu komponentu
+const fetchCategories = async () => {
+  try {
+    const { data } = await axios.get('http://127.0.0.1:8000/api/categories/')
+         
+    categories.value = data.map(cat => cat.name)
+    
+    // Ustawiamy domyślną kategorię, jeśli lista nie jest pusta
+    if (categories.value.length > 0 && !category.value) {
+      category.value = categories.value[0]
+    }
+  } catch (error) {
+    console.error("Błąd podczas pobierania kategorii:", error)
   }
 }
 
+// 2. Dodawanie nowej kategorii do bazy danych Django
+const addNewCategory = async () => {
+  const trimmed = newCategoryName.value.trim()
+  if (trimmed && !categories.value.includes(trimmed)) {
+    try {
+      // Wysyłamy nową kategorię do API
+      await axios.post('http://127.0.0.1:8000/api/categories/', { name: trimmed })
+      
+      categories.value.push(trimmed)
+      category.value = trimmed 
+      newCategoryName.value = ''
+      showAddCategory.value = false
+    } catch (error) {
+      console.error("Błąd zapisu kategorii:", error)
+      alert("Nie udało się zapisać nowej kategorii na serwerze.")
+    }
+  }
+}
+
+// 3. Wysyłanie wydatku
 const handleSubmit = async () => {
-  if (!name.value || !amount.value) return alert("Wypełnij wszystkie pola!")
+  if (!name.value || !amount.value || !category.value) {
+    return alert("Wypełnij wszystkie pola, w tym kategorię!")
+  }
 
   const newExpense = {
     name: name.value,
     amount: parseFloat(amount.value),
-    category: category.value,
+    category: category.value, // Dzięki SlugRelatedField wysyłamy nazwę (String)
     date: date.value
   }
 
@@ -42,10 +68,12 @@ const handleSubmit = async () => {
     amount.value = ''
     emit('expense-added')
   } catch (error) {
-    console.error("Błąd podczas dodawania:", error)
+    console.error("Błąd podczas dodawania wydatku:", error)
     alert("Błąd połączenia z serwerem.")
   }
 }
+
+onMounted(fetchCategories)
 </script>
 
 <template>
@@ -67,7 +95,6 @@ const handleSubmit = async () => {
             {{ cat }}
           </button>
           
-          <!-- Przycisk otwierający pole dodawania -->
           <button 
             v-if="!showAddCategory"
             type="button" 
@@ -78,7 +105,6 @@ const handleSubmit = async () => {
           </button>
       </div>
 
-      <!-- Ukryte pole dodawania nowej kategorii -->
       <div v-if="showAddCategory" class="add-category-input">
         <input 
           v-model="newCategoryName" 
@@ -96,55 +122,50 @@ const handleSubmit = async () => {
 </template>
 
 <style scoped>
-/* Zachowujemy Twoje style i dodajemy poprawki dla kategorii */
-
 .category-section {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
-
 .category-section label {
   font-size: 0.9rem;
   color: var(--text);
   font-weight: 600;
+  text-align: left;
 }
-
 .category-picker {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
-
 .add-btn {
   border: 1px dashed var(--accent) !important;
   color: var(--accent) !important;
   background: transparent !important;
 }
-
 .add-category-input {
   display: flex;
   gap: 8px;
   margin-top: 5px;
   animation: fadeIn 0.3s ease;
 }
-
 .cancel-btn {
   background: #ff7675 !important;
 }
-
 .submit-btn {
   margin-top: 10px;
   background-color: var(--accent);
+  color: white;
   font-size: 1.1rem;
+  border: none;
+  padding: 12px;
+  border-radius: 8px;
+  cursor: pointer;
 }
-
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(-5px); }
   to { opacity: 1; transform: translateY(0); }
 }
-
-/* Reszta Twoich stylów ... */
 .form-container {
   background: var(--code-bg);
   padding: 20px;
@@ -154,7 +175,6 @@ const handleSubmit = async () => {
   gap: 12px;
   border: 1px solid var(--border);
 }
-
 input {
   background: var(--bg);
   color: var(--text-h);
@@ -162,7 +182,6 @@ input {
   border-radius: 6px;
   border: 1px solid var(--border);
 }
-
 .category-btn {
   background: var(--bg);
   color: var(--text);
@@ -172,7 +191,6 @@ input {
   cursor: pointer;
   font-size: 14px;
 }
-
 .category-btn.active {
   background-color: var(--accent);
   color: white;

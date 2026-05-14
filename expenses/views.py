@@ -1,10 +1,11 @@
-from django.shortcuts import render
 from rest_framework import generics
-from .models import Expense
-from .serializers import ExpenseSerializer
+from .models import Expense, Category
+from .serializers import ExpenseSerializer, CategorySerializer
 
-# Pobieranie (GET) i dodawanie wydatków (POST)
 class ExpenseListCreateView(generics.ListCreateAPIView):
-    # definicja jakie dane będą pobierane i jak będą serializowane
     queryset = Expense.objects.all().order_by('-date')
     serializer_class = ExpenseSerializer
+
+class CategoryListCreateView(generics.ListCreateAPIView):
+    queryset = Category.objects.all()
+    serializer_class = CategorySerializer

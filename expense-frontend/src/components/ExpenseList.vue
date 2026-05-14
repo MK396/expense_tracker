@@ -51,6 +51,7 @@ defineProps(['expenses'])
 .expense-name {
   font-weight: bold;
   font-size: 1.1rem;
+  text-transform: capitalize;
 }
 
 .expense-amount {
@@ -67,8 +68,7 @@ defineProps(['expenses'])
 
 .expense-category {
   background: #f0f0f0;
-  padding: 2px 8px;
   border-radius: 4px;
-  text-transform: lowercase;
+  text-transform: capitalize;
 }
 </style>
