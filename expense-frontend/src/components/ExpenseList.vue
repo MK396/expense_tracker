@@ -21,7 +21,6 @@ defineProps(['expenses'])
 <style scoped>
 .expenses-container {
   display: grid;
-  /* Tworzy siatkę: karty będą miały min. 300px, dopasują się do szerokości ekranu */
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 16px;
   padding: 20px 0;
@@ -38,7 +37,7 @@ defineProps(['expenses'])
 
 .expense-card:hover {
   transform: translateY(-5px);
-  border-color: #42b883; /* Kolor Vue dla akcentu */
+  border-color: #42b883;
 }
 
 .card-header {
