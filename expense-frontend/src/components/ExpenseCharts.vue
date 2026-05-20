@@ -40,13 +40,13 @@ const chartData = computed(() => {
       {
         label: 'Suma wydatków (zł)',
         backgroundColor: [
-          '#42b883', // Zielony Vue
-          '#35495e', // Ciemny niebieski Vue
-          '#ff7675', // Czerwony
-          '#74b9ff', // Jasny niebieski
-          '#a29bfe', // Fioletowy
-          '#ffeaa7', // Żółty
-          '#fab1a0'  // Brzoskwiniowy
+          '#42b883',
+          '#35495e',
+          '#ff7675',
+          '#74b9ff',
+          '#a29bfe',
+          '#ffeaa7',
+          '#fab1a0'
         ],
         borderWidth: 2,
         borderColor: '#ffffff',

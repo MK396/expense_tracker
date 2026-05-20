@@ -21,7 +21,6 @@ const fetchCategories = async () => {
          
     categories.value = data.map(cat => cat.name)
     
-    // Ustawiamy domyślną kategorię, jeśli lista nie jest pusta
     if (categories.value.length > 0 && !category.value) {
       category.value = categories.value[0]
     }
@@ -58,7 +57,7 @@ const handleSubmit = async () => {
   const newExpense = {
     name: name.value,
     amount: parseFloat(amount.value),
-    category: category.value, // Dzięki SlugRelatedField wysyłamy nazwę (String)
+    category: category.value,
     date: date.value
   }
 
