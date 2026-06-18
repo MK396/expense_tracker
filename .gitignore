@@ -16,3 +16,9 @@ npm-debug.log*
 .vscode/
 
 kroki.txt
+
+# Moduł OCR
+ocr/original/
+ocr/preprocessed/
+ocr/txt/
+ocr/ocr_cache.db

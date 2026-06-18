@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from 'vue';
 
-// Definiujemy propsy - komponent będzie oczekiwał tablicy 'expenses'
+
 const props = defineProps({
   expenses: {
     type: Array,
@@ -9,14 +9,14 @@ const props = defineProps({
   }
 });
 
-// Logika obliczania sumy całkowitej
+
 const totalAmount = computed(() => {
   return props.expenses
     .reduce((sum, item) => sum + Number(item.amount || item.kwota || 0), 0)
     .toLocaleString('pl-PL', { minimumFractionDigits: 2 });
 });
 
-// Logika obliczania wydatków z obecnego miesiąca
+
 const monthlyAmount = computed(() => {
   const now = new Date();
   const currentMonth = now.getMonth();

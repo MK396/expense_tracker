@@ -2,7 +2,7 @@
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
 
-// Komponenty
+
 import AppHeader from './components/AppHeader.vue'
 import ExpenseStats from './components/ExpenseStats.vue'
 import ExpenseList from './components/ExpenseList.vue'
@@ -10,18 +10,17 @@ import ExpenseForm from './components/ExpenseForm.vue'
 import BaseModal from './components/BaseModal.vue'
 import ExpenseCharts from './components/ExpenseCharts.vue'
 
-// Stan aplikacji
 const expenses = ref([])
 const isDark = ref(false)
 const showForm = ref(false)
 
-// Logika motywu
+
 const toggleTheme = () => {
   isDark.value = !isDark.value
   document.documentElement.setAttribute('data-theme', isDark.value ? 'dark' : 'light')
 }
 
-// Logika danych
+
 const fetchExpenses = async () => {
   try {
     const { data } = await axios.get('http://127.0.0.1:8000/api/expenses/')
