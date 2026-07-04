@@ -197,7 +197,7 @@ def wytnij_od_paragonu_fiskalnego(tekst):
 
 if __name__ == "__main__":
     # TUTAJ NAZWE ZMIENIC PLKU
-    file_name = "paragon1.jpeg"
+    file_name = "paragon3.jpeg"
     file_path = BASE_DIR / "original" / file_name
 
     if not file_path.exists():
