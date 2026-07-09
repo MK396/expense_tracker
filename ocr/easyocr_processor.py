@@ -124,17 +124,51 @@ def waliduj_nip(nip):
     return (suma % 11) == int(nip[9])
 
 def wyciagnij_czysty_nip(tekst):
-    wzorzec_nip = r"NIP.{0,15}?(\d{9,11})"
-    mecz = re.search(wzorzec_nip, tekst, re.IGNORECASE)
-    return mecz.group(1) if mecz else None
+    # 1. Usuwamy białe znaki i myślniki, bo OCR często rozbija NIP (np. "899 236-72-73")
+    tekst_zbity = re.sub(r'[\s\-]', '', tekst)
+    
+    # 2. Szukamy po słowie kluczowym (np. NIP8992367273)
+    mecz = re.search(r'NIP.*?(\d{10})', tekst_zbity, re.IGNORECASE)
+    if mecz and waliduj_nip(mecz.group(1)):
+        return mecz.group(1)
+        
+    # 3. ZAPASOWY RADAR: OCR mógł źle przeczytać słowo "NIP". 
+    # Szukamy WSZYSTKICH 10-cyfrowych ciągów w całym tekście.
+    potencjalne_nipy = re.findall(r'(?<!\d)(\d{10})(?!\d)', tekst_zbity)
+    for kandydat in potencjalne_nipy:
+        # Test matematyczny (suma kontrolna). Jeśli przejdzie, na 100% mamy NIP.
+        if waliduj_nip(kandydat):
+            return kandydat
+            
+    return None
 
 def wyciagnij_suma_pln(tekst):
-    wzorzec_sumy = r"SUMA[AĄ]?\s*(?:PLN)?[\s\S]{0,50}?(\d+[\s,.]+\d{2})\s*PLN"
-    mecz = re.search(wzorzec_sumy, tekst, re.IGNORECASE)
-    if mecz: return f"{mecz.group(1).replace(' ', '').replace(',', '.')} PLN"
-    wzorzec_fallback = r"SUMA[AĄ]?\s*(?:PLN)?[\s\S]{0,40}?(\d+[\s,.]+\d{2})"
+    # 1. Wzorzec priorytetowy: szuka konkretnych haseł: "SUMA PLN", "RAZEM", "DO ZAPŁATY"
+    # (Toleruje drobne błędy OCR, np. SUHA, SUNA zamiast SUMA)
+    wzorzec_glowny = r"(?:SU[MHN]A\s*PLN|RAZEM|ZAP[LŁ]ATY)[\s\S]{0,40}?(\d+[\s,.]+\d{2})"
+    mecz = re.search(wzorzec_glowny, tekst, re.IGNORECASE)
+    if mecz:
+        # Trik: usuwamy wszystko oprócz cyfr i odcinamy 2 ostatnie na grosze
+        cyfry = re.sub(r'\D', '', mecz.group(1))
+        return f"{cyfry[:-2]}.{cyfry[-2:]} PLN"
+        
+    # 2. Drugi krok: samo słowo "SUMA", ale kategorycznie wykluczamy "SUMA PTU" 
+    # (bo PTU to podatek VAT, a nie ostateczna łączna kwota)
+    wzorzec_fallback = r"SU[MHN]A(?!\s*PTU)[\s\S]{0,40}?(\d+[\s,.]+\d{2})"
     mecz_fb = re.search(wzorzec_fallback, tekst, re.IGNORECASE)
-    if mecz_fb: return f"{mecz_fb.group(1).replace(' ', '').replace(',', '.')} PLN"
+    if mecz_fb:
+        cyfry = re.sub(r'\D', '', mecz_fb.group(1))
+        return f"{cyfry[:-2]}.{cyfry[-2:]} PLN"
+        
+    # 3. Ostatnia deska ratunku: szukamy formatu "XX,XX PLN" na samym dole paragonu 
+    # (Na paragonie z Mai Lan złapie w ten sposób napis "GOTÓWKA 92,00 PLN")
+    wzorzec_pln = r"(\d+[\s,.]+\d{2})\s*PLN"
+    mecze_pln = re.findall(wzorzec_pln, tekst, re.IGNORECASE)
+    if mecze_pln:
+        # Bierzemy ostatnie wystąpienie (z dołu tekstu)
+        cyfry = re.sub(r'\D', '', mecze_pln[-1])
+        return f"{cyfry[:-2]}.{cyfry[-2:]} PLN"
+
     return "Nie znaleziono kwoty"
 
 def pobierz_nazwe_firmy_po_nip(nip):
@@ -280,6 +314,45 @@ def wyciagnij_pozycje_z_paragonu(tekst_paragonu):
             })
 
     return pozycje
+
+def analizuj_paragon_dla_api(file_path):
+    """Funkcja do wywoływania przez API Django"""
+    file_path = Path(file_path) 
+    full_text = read_receipt(file_path)
+    
+    czysty_nip = wyciagnij_czysty_nip(full_text)
+    sklep_w_aplikacji = "Nieznany Sklep"
+    
+    # --- NOWE: Odczytanie łącznej sumy z paragonu ---
+    wykryta_suma = wyciagnij_suma_pln(full_text)
+
+    # Skoro wyciagnij_czysty_nip coś zwróciło, to NIP jest na 100% poprawny
+    if czysty_nip:
+        oficjalna_nazwa = sprawdz_nip_w_bazie(czysty_nip)
+        if not oficjalna_nazwa:
+            oficjalna_nazwa = pobierz_nazwe_firmy_po_nip(czysty_nip)
+            if oficjalna_nazwa:
+                zapisz_nip_do_bazy(czysty_nip, oficjalna_nazwa)
+        
+        sklep_w_aplikacji = mapuj_na_prosta_nazwe(oficjalna_nazwa)
+
+    filtered_text = wytnij_od_paragonu_fiskalnego(full_text)
+    lista_produktow = wyciagnij_pozycje_z_paragonu(filtered_text)
+    
+    formatted_list = []
+    for p in lista_produktow:
+        formatted_list.append({
+            "name": p["nazwa"][:200], 
+            "amount": p["suma"]
+        })
+        
+    return {
+        "nip": czysty_nip if czysty_nip else "Brak",
+        "sklep": sklep_w_aplikacji,
+        "suma_calkowita": wykryta_suma, # Przekazujemy sumę do API
+        "produkty": formatted_list
+    }
+
 
 # ==========================================
 # GLOWNY BLOK

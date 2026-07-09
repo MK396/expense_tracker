@@ -9,11 +9,12 @@ import ExpenseList from './components/ExpenseList.vue'
 import ExpenseForm from './components/ExpenseForm.vue'
 import BaseModal from './components/BaseModal.vue'
 import ExpenseCharts from './components/ExpenseCharts.vue'
+import ScannerForm from './components/ScannerForm.vue' // NOWY IMPORT
 
 const expenses = ref([])
 const isDark = ref(false)
 const showForm = ref(false)
-
+const showScanner = ref(false) // NOWY STAN
 
 const toggleTheme = () => {
   isDark.value = !isDark.value
@@ -45,6 +46,7 @@ onMounted(fetchExpenses)
       :show-form="showForm"
       @toggle-theme="toggleTheme"
       @toggle-form="showForm = !showForm"
+      @toggle-scanner="showScanner = !showScanner" 
     />
 
     <ExpenseStats :expenses="expenses" />
@@ -55,6 +57,10 @@ onMounted(fetchExpenses)
 
     <BaseModal :show="showForm" @close="showForm = false">
       <ExpenseForm @expense-added="handleExpenseAdded" />
+    </BaseModal>
+
+    <BaseModal :show="showScanner" @close="showScanner = false">
+      <ScannerForm @expenses-added="() => { fetchExpenses(); showScanner = false; }" />
     </BaseModal>
   </div>
 </template>

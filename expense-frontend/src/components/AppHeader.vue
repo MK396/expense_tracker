@@ -1,14 +1,13 @@
 <script setup>
 defineProps(['isDark', 'showForm'])
-const emit = defineEmits(['toggle-theme', 'toggle-form'])
-</script>
+const emit = defineEmits(['toggle-theme', 'toggle-form', 'toggle-scanner'])</script>
 
 <template>
   <header class="header-content">
     <h1>Tracker Wydatków</h1>
     <div class="header-actions">
       <button @click="emit('toggle-form')" class="add-btn">Dodaj wydatek</button>
-      <button class="scan-btn">Skanuj paragon</button>
+      <button @click="emit('toggle-scanner')" class="scan-btn">Skanuj paragon</button>
       <button @click="emit('toggle-theme')" class="theme-toggle">{{ isDark ? '☀️' : '🌙' }}</button>
     </div>
   </header>
