@@ -54,7 +54,6 @@ const handleFileUpload = async (event) => {
   const formData = new FormData()
   formData.append('receipt', file)
 
-  // Jeśli wybrano Gemini, dajemy znać użytkownikowi, że wysyłamy plik
   if (selectedEndpoint.value.includes('gemini')) {
     currentStatusMessage.value = 'Wysyłanie obrazu do chmury i analiza dokumentu...'
   }
@@ -73,6 +72,7 @@ const handleFileUpload = async (event) => {
       products.value = scanResult.produkty.map(p => ({
         ...p,
         selected: true,
+        split: false, // Inicjalizacja stanu dzielenia na pół jako "false"
         category: categories.value.length > 0 ? categories.value[0] : ''
       }))
     }
@@ -97,9 +97,14 @@ const saveSelected = async () => {
 
   selectedProducts.forEach(p => {
     const cat = p.category
+    
+    // Obliczamy ostateczną kwotę w zależności od zaznaczenia checkboxa "½"
+    const originalAmount = parseFloat(p.amount) || 0
+    const finalAmount = p.split ? (originalAmount / 2) : originalAmount
+
     if (!groupedExpenses[cat]) {
       groupedExpenses[cat] = {
-        name: shopName.value, // Usunięto doklejanie " - ${cat}" z nazwy głównej
+        name: shopName.value, 
         amount: 0,
         category: cat,
         date: new Date().toISOString().split('T')[0],
@@ -107,11 +112,12 @@ const saveSelected = async () => {
       }
     }
     
-    groupedExpenses[cat].amount += parseFloat(p.amount)
+    groupedExpenses[cat].amount += finalAmount
     
     groupedExpenses[cat].details.push({
-      name: p.name,
-      amount: parseFloat(p.amount)
+      // Jeśli produkt był dzielony, dodajemy czytelny dopisek (½) w historii bazy danych
+      name: p.split ? `${p.name} (½)` : p.name,
+      amount: parseFloat(finalAmount.toFixed(2))
     })
   })
 
@@ -134,7 +140,6 @@ const saveSelected = async () => {
   <div class="scanner-container">
     <h2>Skaner Paragonów</h2>
     
-    <!-- Jeśli trwa ładowanie, ukrywamy przyciski i pokazujemy jeden czysty status -->
     <div v-if="isLoading" class="loading-box">
       <div class="spinner"></div>
       <p class="loading-text">Analizowanie...</p>
@@ -144,12 +149,10 @@ const saveSelected = async () => {
     <div v-else class="upload-section">
       <input type="file" ref="fileInput" accept="image/*" style="display: none" @change="handleFileUpload" />
       
-      <!-- Przycisk 1: EasyOCR -->
       <button class="upload-btn" @click="triggerScan('/api/scan/')">
         Skanuj (EasyOCR - Lokalnie)
       </button>
 
-      <!-- Przycisk 2: Gemini AI -->
       <button class="upload-btn btn-gemini" @click="triggerScan('/api/scan-gemini/')">
         Skanuj (Gemini AI - Chmura)
       </button>
@@ -169,14 +172,28 @@ const saveSelected = async () => {
             <th>+</th>
             <th>Produkt</th>
             <th>Cena</th>
+            <th class="text-center">½</th> <!-- Nowa kolumna nagłówka -->
             <th>Kategoria</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(prod, idx) in products" :key="idx">
+          <!-- Dodajemy klasę CSS 'split-row' jeśli produkt ma zaznaczoną opcję dzielenia na pół -->
+          <tr v-for="(prod, idx) in products" :key="idx" :class="{ 'split-row': prod.split }">
             <td><input type="checkbox" v-model="prod.selected" /></td>
             <td><input type="text" v-model="prod.name" class="table-input" /></td>
-            <td><input type="number" step="0.01" v-model="prod.amount" class="table-input amount-input" /></td>
+            <td>
+              <div class="price-container">
+                <input type="number" step="0.01" v-model="prod.amount" class="table-input amount-input" />
+                <!-- Podgląd ceny po podziale na pół (na żywo) -->
+                <span v-if="prod.split" class="split-preview">
+                  ({{ (prod.amount / 2).toFixed(2) }})
+                </span>
+              </div>
+            </td>
+            <!-- Kolumna z checkboxem do dzielenia ceny na pół -->
+            <td class="text-center">
+              <input type="checkbox" v-model="prod.split" class="split-checkbox" />
+            </td>
             <td>
               <select v-model="prod.category" class="table-input">
                 <option v-for="cat in categories" :key="cat" :value="cat">{{ cat }}</option>
@@ -286,8 +303,35 @@ const saveSelected = async () => {
 
 .receipt-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
 .receipt-table th { text-align: left; padding-bottom: 10px; font-size: 0.9em; color: var(--text); }
-.receipt-table td { padding: 5px 0; }
+.receipt-table td { padding: 5px 0; vertical-align: middle; }
 .table-input { background: var(--bg); color: var(--text-h); border: 1px solid var(--border); border-radius: 4px; padding: 5px; width: 90%; }
 .amount-input { width: 70px; }
 .submit-btn { background: #42b883; color: white; border: none; padding: 12px; border-radius: 8px; width: 100%; cursor: pointer; font-weight: bold; }
+
+/* NOWE STYLE DLA PODZIAŁU CENY */
+.price-container {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.split-preview {
+  font-size: 0.8rem;
+  color: #2563eb;
+  font-weight: bold;
+  white-space: nowrap;
+}
+
+.split-row {
+  background: rgba(37, 99, 235, 0.05); /* Delikatne podświetlenie wiersza */
+}
+
+.text-center {
+  text-align: center;
+}
+
+.split-checkbox {
+  cursor: pointer;
+  transform: scale(1.1);
+}
 </style>
