@@ -53,7 +53,7 @@ onMounted(fetchExpenses)
     
     <ExpenseCharts :expenses="expenses" />
 
-    <ExpenseList :expenses="expenses" />
+    <ExpenseList :expenses="expenses" @refresh-expenses="fetchExpenses" />
 
     <BaseModal :show="showForm" @close="showForm = false">
       <ExpenseForm @expense-added="handleExpenseAdded" />

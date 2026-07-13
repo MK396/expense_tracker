@@ -1,7 +1,6 @@
 <script setup>
 import { computed } from 'vue';
 
-
 const props = defineProps({
   expenses: {
     type: Array,
@@ -9,27 +8,44 @@ const props = defineProps({
   }
 });
 
-
+// --- SUMA CAŁKOWITA ---
 const totalAmount = computed(() => {
   return props.expenses
     .reduce((sum, item) => sum + Number(item.amount || item.kwota || 0), 0)
     .toLocaleString('pl-PL', { minimumFractionDigits: 2 });
 });
 
+// --- LOGIKA BUDŻETU I BIEŻĄCEGO MIESIĄCA ---
+const monthlyLimit = 2000;
 
-const monthlyAmount = computed(() => {
+// 1. Zmienna z surową wartością liczbową (potrzebna do wyliczenia procentów)
+const monthlyAmountRaw = computed(() => {
   const now = new Date();
   const currentMonth = now.getMonth();
   const currentYear = now.getFullYear();
 
-  const total = props.expenses
+  return props.expenses
     .filter(item => {
       const d = new Date(item.date || item.data);
       return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
     })
     .reduce((sum, item) => sum + Number(item.amount || item.kwota || 0), 0);
+});
 
-  return total.toLocaleString('pl-PL', { minimumFractionDigits: 2 });
+// 2. Zmienna z ładnym polskim formatowaniem (do wyświetlenia na ekranie)
+const monthlyAmount = computed(() => {
+  return monthlyAmountRaw.value.toLocaleString('pl-PL', { minimumFractionDigits: 2 });
+});
+
+// 3. Obliczenie zapełnienia paska (max 100%)
+const budgetPercentage = computed(() => {
+  const percentage = (monthlyAmountRaw.value / monthlyLimit) * 100;
+  return Math.min(percentage, 100).toFixed(1);
+});
+
+// 4. Sprawdzenie, czy wydatki przekraczają 80% limitu
+const isOverBudget = computed(() => {
+  return (monthlyAmountRaw.value / monthlyLimit) * 100 > 80;
 });
 </script>
 
@@ -43,11 +59,27 @@ const monthlyAmount = computed(() => {
       </div>
     </div>
 
+    <!-- KAFELEK Z PASKIEM POSTĘPU -->
     <div class="card">
       <div class="card-icon">📅</div>
       <div class="card-info">
         <h3>W tym miesiącu</h3>
         <p>{{ monthlyAmount }} zł</p>
+
+        <!-- Pasek budżetu -->
+        <div class="budget-container">
+          <div class="budget-info">
+            <span>Limit: {{ monthlyLimit }} zł</span>
+            <span>{{ budgetPercentage }}%</span>
+          </div>
+          <div class="progress-bar-bg">
+            <div 
+              class="progress-bar-fill" 
+              :class="{ 'danger-mode': isOverBudget }"
+              :style="{ width: budgetPercentage + '%' }"
+            ></div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -89,6 +121,11 @@ const monthlyAmount = computed(() => {
   border-radius: 12px;
 }
 
+.card-info {
+  flex: 1; /* Pozwala sekcji informacyjnej zająć całą resztę miejsca (wymagane dla paska!) */
+  min-width: 0;
+}
+
 .card-info h3 {
   margin: 0;
   font-size: 0.8rem;
@@ -104,4 +141,38 @@ const monthlyAmount = computed(() => {
   color: #1f2937;
 }
 
+/* --- STYLE DLA PASKA BUDŻETU --- */
+.budget-container {
+  margin-top: 10px;
+  width: 100%;
+}
+
+.budget-info {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: #4b5563; /* Ciemniejszy szary dla czytelności */
+  font-weight: 600;
+  margin-bottom: 5px;
+}
+
+.progress-bar-bg {
+  height: 8px;
+  width: 100%;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: #10b981; /* Zielony */
+  border-radius: 10px;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s ease;
+}
+
+/* Zmienia kolor na czerwony, jeśli aktywuje się 'danger-mode' */
+.progress-bar-fill.danger-mode {
+  background: #ef4444; 
+}
 </style>
