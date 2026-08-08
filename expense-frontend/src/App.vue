@@ -1,7 +1,6 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import axios from 'axios'
-
 
 import AppHeader from './components/AppHeader.vue'
 import ExpenseStats from './components/ExpenseStats.vue'
@@ -9,18 +8,18 @@ import ExpenseList from './components/ExpenseList.vue'
 import ExpenseForm from './components/ExpenseForm.vue'
 import BaseModal from './components/BaseModal.vue'
 import ExpenseCharts from './components/ExpenseCharts.vue'
-import ScannerForm from './components/ScannerForm.vue' // NOWY IMPORT
+import ScannerForm from './components/ScannerForm.vue'
 
 const expenses = ref([])
 const isDark = ref(false)
 const showForm = ref(false)
-const showScanner = ref(false) // NOWY STAN
+const showScanner = ref(false)
+const timeRange = ref('30') // Główny stan zakresu czasu dla wykresów i listy
 
 const toggleTheme = () => {
   isDark.value = !isDark.value
   document.documentElement.setAttribute('data-theme', isDark.value ? 'dark' : 'light')
 }
-
 
 const fetchExpenses = async () => {
   try {
@@ -30,6 +29,22 @@ const fetchExpenses = async () => {
     console.error("Błąd:", error)
   }
 }
+
+// Przefiltrowane wydatki przekazywane do wykresów i kafelków
+const filteredExpenses = computed(() => {
+  if (timeRange.value === 'all') {
+    return expenses.value
+  }
+  
+  const now = new Date()
+  return expenses.value.filter(expense => {
+    const expDate = new Date(expense.date)
+    const diffTime = Math.abs(now - expDate)
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    
+    return diffDays <= parseInt(timeRange.value)
+  })
+})
 
 const handleExpenseAdded = () => {
   fetchExpenses()
@@ -51,9 +66,15 @@ onMounted(fetchExpenses)
 
     <ExpenseStats :expenses="expenses" />
     
-    <ExpenseCharts :expenses="expenses" />
+    <ExpenseCharts 
+      :expenses="expenses" 
+      v-model:timeRange="timeRange" 
+    />
 
-    <ExpenseList :expenses="expenses" @refresh-expenses="fetchExpenses" />
+    <ExpenseList 
+      :expenses="filteredExpenses" 
+      @refresh-expenses="fetchExpenses" 
+    />
 
     <BaseModal :show="showForm" @close="showForm = false">
       <ExpenseForm @expense-added="handleExpenseAdded" />

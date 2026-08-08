@@ -2,7 +2,7 @@
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
 
-// Przyjmujemy listę wydatków z głównego widoku
+// Przyjmuje przefiltrowaną listę wydatków
 const props = defineProps({
   expenses: {
     type: Array,
@@ -10,14 +10,86 @@ const props = defineProps({
   }
 })
 
-// Emitujemy zdarzenie do odświeżenia listy po usunięciu/edycji
 const emit = defineEmits(['refresh-expenses'])
 
 const categories = ref([])
 
+// Funkcja formatująca datę z YYYY-MM-DD (lub ISO) na DD-MM-YYYY
+const formatDate = (rawDate) => {
+  if (!rawDate) return ''
+  const d = new Date(rawDate)
+  if (isNaN(d.getTime())) return rawDate
+
+  const day = String(d.getDate()).padStart(2, '0')
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const year = d.getFullYear()
+
+  return `${day}-${month}-${year}`
+}
+
+const shopKeywords = {
+  'kaufland': 'Kaufland',
+  'biedronka': 'Biedronka',
+  'jeronimo martins': 'Biedronka',
+  'lidl': 'Lidl',
+  'zabka': 'Żabka',
+  'żabka': 'Żabka',
+  'dino': 'Dino',
+  'auchan': 'Auchan',
+  'carrefour': 'Carrefour',
+  'rossmann': 'Rossmann',
+  'pepco': 'Pepco',
+  'action': 'Action',
+  'castorama': 'Castorama',
+  'leroy merlin': 'Leroy Merlin',
+  'orlen': 'Orlen',
+  'mcdonald': 'McDonald\'s',
+  'kfc': 'KFC'
+}
+
+const normalizeShopName = (rawName) => {
+  if (!rawName) return 'Inne'
+  const cleanName = rawName.toLowerCase().trim()
+
+  for (const [keyword, prettyName] of Object.entries(shopKeywords)) {
+    if (cleanName.includes(keyword)) {
+      return prettyName
+    }
+  }
+
+  return rawName
+}
+
+const categoryColors = {
+  'Jedzenie': '#F8AD9D',
+  'Alkohol': '#FFD166',
+  'Transport': '#C77DFF',
+  'Dom': '#B8C0FF',
+  'Sport': '#74B9FF',
+  'Restauracje': '#F4ACB7',
+  'Edukacja': '#CBFFC0',
+  'Prezenty': '#FFEAA7',
+  'Inne': '#D3D3D3'
+}
+
+const getCategoryColor = (category) => {
+  const catName = typeof category === 'object' ? category.name : category
+  
+  if (categoryColors[catName]) {
+    return categoryColors[catName]
+  }
+
+  let hash = 0
+  const name = catName || 'Inne'
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash)
+  }
+  const hue = Math.abs(hash) % 360
+  return `hsl(${hue}, 65%, 75%)`
+}
+
 onMounted(async () => {
   try {
-    // Pobieramy kategorie, aby móc je wybierać w trybie edycji
     const { data } = await axios.get('http://127.0.0.1:8000/api/categories/')
     categories.value = data.map(c => c.name)
   } catch (e) {
@@ -25,30 +97,25 @@ onMounted(async () => {
   }
 })
 
-// USUWANIE WYDATKU
 const deleteExpense = async (id) => {
   if (!confirm("Na pewno chcesz usunąć ten wydatek?")) return;
   
   try {
     await axios.delete(`http://127.0.0.1:8000/api/expenses/${id}/`)
-    emit('refresh-expenses') // Odśwież główny ekran
+    emit('refresh-expenses')
   } catch (e) {
     alert("Wystąpił błąd podczas usuwania.")
     console.error(e)
   }
 }
 
-// WŁĄCZANIE TRYBU EDYCJI NA KAFELKU
 const toggleEdit = (expense) => {
   expense.isEditing = true
-  // Tworzymy tymczasowe pola, żeby można było anulować bez psucia widoku
   expense.editName = expense.name
   expense.editAmount = expense.amount
-  // Upewniamy się, że kategoria jest poprawnym stringiem
   expense.editCategory = typeof expense.category === 'object' ? expense.category.name : expense.category
 }
 
-// ZAPISYWANIE ZMIAN W WYDATKU
 const saveExpense = async (expense) => {
   try {
     await axios.patch(`http://127.0.0.1:8000/api/expenses/${expense.id}/`, {
@@ -57,7 +124,7 @@ const saveExpense = async (expense) => {
       category: expense.editCategory
     })
     expense.isEditing = false
-    emit('refresh-expenses') // Odśwież główny ekran z nową sumą
+    emit('refresh-expenses')
   } catch (e) {
     alert("Wystąpił błąd podczas zapisywania zmian.")
     console.error(e)
@@ -66,100 +133,130 @@ const saveExpense = async (expense) => {
 </script>
 
 <template>
-  <div class="expense-grid">
-    <div v-for="expense in expenses" :key="expense.id" class="expense-card">
-      
-      <!-- WIDOK STANDARDOWY KAFELKA -->
-      <div v-if="!expense.isEditing" class="card-content">
-        <div class="card-header">
-          <!-- Dodane skracanie długich nazw -->
-          <h3 class="card-title" :title="expense.name">{{ expense.name }}</h3>
-          
-          <!-- Akcje kafelka (Edycja i Kosz) -->
-          <div class="card-actions">
-            <button @click="toggleEdit(expense)" class="action-btn" title="Edytuj">✏️</button>
-            <button @click="deleteExpense(expense.id)" class="action-btn delete-btn" title="Usuń">🗑️</button>
-          </div>
-        </div>
+  <div class="list-wrapper">
+    <div v-if="expenses.length > 0" class="expense-grid">
+      <div v-for="expense in expenses" :key="expense.id" class="card">
         
-        <div class="card-body">
-          <p class="amount">{{ expense.amount }} zł</p>
+        <template v-if="!expense.isEditing">
+          <div class="card-main">
+            <div class="card-info">
+              <div class="card-header">
+                <h3 :title="expense.name">{{ normalizeShopName(expense.name) }}</h3>
+                
+                <div class="card-actions">
+                  <button @click="toggleEdit(expense)" class="action-btn" title="Edytuj">✏️</button>
+                  <button @click="deleteExpense(expense.id)" class="action-btn" title="Usuń">🗑️</button>
+                </div>
+              </div>
+              
+              <p class="amount">{{ Number(expense.amount).toFixed(2) }} zł</p>
+            </div>
+          </div>
+
           <div class="card-footer">
-            <span class="category-badge">{{ typeof expense.category === 'object' ? expense.category.name : expense.category }}</span>
-            <span class="date">{{ expense.date }}</span>
+            <span 
+              class="category-badge" 
+              :style="{ backgroundColor: getCategoryColor(expense.category) }"
+            >
+              {{ typeof expense.category === 'object' ? expense.category.name : expense.category }}
+            </span>
+            <span class="date">{{ formatDate(expense.date) }}</span>
+          </div>
+        </template>
+
+        <div v-else class="edit-mode">
+          <input v-model="expense.editName" class="edit-input" placeholder="Nazwa wydatku" />
+          <input type="number" step="0.01" v-model="expense.editAmount" class="edit-input amount-input" placeholder="Kwota" />
+          
+          <select v-model="expense.editCategory" class="edit-input">
+            <option v-for="cat in categories" :key="cat" :value="cat">{{ cat }}</option>
+          </select>
+          
+          <div class="edit-actions">
+            <button @click="saveExpense(expense)" class="btn-save">Zapisz</button>
+            <button @click="expense.isEditing = false" class="btn-cancel">Anuluj</button>
           </div>
         </div>
-      </div>
 
-      <!-- TRYB EDYCJI (INLINE) -->
-      <div v-else class="edit-mode">
-        <input v-model="expense.editName" class="edit-input" placeholder="Nazwa wydatku" />
-        <input type="number" step="0.01" v-model="expense.editAmount" class="edit-input amount-input" placeholder="Kwota" />
-        
-        <select v-model="expense.editCategory" class="edit-input">
-          <option v-for="cat in categories" :key="cat" :value="cat">{{ cat }}</option>
-        </select>
-        
-        <div class="edit-actions">
-          <button @click="saveExpense(expense)" class="btn-save">Zapisz</button>
-          <button @click="expense.isEditing = false" class="btn-cancel">Anuluj</button>
-        </div>
       </div>
+    </div>
 
+    <div v-else class="no-data-msg">
+      <p>Brak wydatków w wybranym przedziale czasowym.</p>
     </div>
   </div>
 </template>
 
 <style scoped>
-.expense-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 20px;
-  margin-top: 20px;
+.list-wrapper {
+  width: 100%;
 }
 
-.expense-card {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 15px;
-  transition: transform 0.2s, box-shadow 0.2s;
+.expense-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 1.25rem;
+}
+
+.card {
+  background: var(--accent-text);
+  padding: 1.25rem;
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: var(--shadow);
   position: relative;
 }
 
-.expense-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+.card:hover {
+  transform: translateY(-3px);
 }
 
-/* WIDOK STANDARDOWY */
+.card-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  width: 100%;
+}
+
+.card-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .card-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 15px;
+  align-items: center;
+  width: 100%;
 }
 
-.card-title {
+.card-info h3 {
   margin: 0;
-  font-size: 1.1rem;
-  color: var(--text-h);
-  /* Truncate - ucinanie z wielokropkiem */
+  font-size: 0.8rem;
+  color: var(--accent);
+  opacity: 0.8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 80%;
+  max-width: 70%;
 }
 
 .card-actions {
   display: flex;
-  gap: 8px;
-  opacity: 0; /* Ukryte domyślnie */
-  transition: opacity 0.2s;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
 }
 
-/* Pokazujemy ikonki, gdy najedziesz na kafelek */
-.expense-card:hover .card-actions {
+.card:hover .card-actions {
   opacity: 1;
 }
 
@@ -167,58 +264,77 @@ const saveExpense = async (expense) => {
   background: transparent;
   border: none;
   cursor: pointer;
-  font-size: 1.1rem;
-  padding: 0;
-  opacity: 0.6;
-  transition: opacity 0.2s, transform 0.1s;
+  font-size: 0.9rem;
+  padding: 2px;
+  line-height: 1;
+  transition: transform 0.1s ease;
 }
 
 .action-btn:hover {
-  opacity: 1;
-  transform: scale(1.1);
+  transform: scale(1.2);
 }
 
-.delete-btn:hover {
-  opacity: 1;
-}
-
-.amount {
-  font-size: 1.4rem;
-  font-weight: bold;
+.card-info p.amount {
+  margin: 4px 0 0;
+  font-size: 1.5rem;
+  font-weight: 800;
   color: var(--accent);
-  margin: 0 0 10px 0;
+  text-align: center;
 }
 
 .card-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 0.85rem;
-  color: var(--text);
+  gap: 0.5rem;
+  width: 100%;
+  margin-top: 0.25rem;
 }
 
 .category-badge {
-  background: rgba(37, 99, 235, 0.1);
-  color: #2563eb;
-  padding: 4px 8px;
-  border-radius: 8px;
-  font-weight: 600;
+  color: #1a252c;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 0.75rem;
+  white-space: nowrap;
 }
 
-/* TRYB EDYCJI */
+.date {
+  font-size: 0.75rem;
+  color: var(--accent);
+  opacity: 0.7;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.no-data-msg {
+  padding: 40px;
+  text-align: center;
+  color: var(--accent);
+  font-style: italic;
+}
+
 .edit-mode {
+  width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .edit-input {
-  background: var(--code-bg);
+  background: var(--bg);
   color: var(--text-h);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 8px;
-  font-size: 0.95rem;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 0.85rem;
+  font-family: inherit;
+  outline: none;
+}
+
+.edit-input:focus {
+  border-color: var(--accent);
 }
 
 .amount-input {
@@ -228,29 +344,33 @@ const saveExpense = async (expense) => {
 
 .edit-actions {
   display: flex;
-  gap: 10px;
-  margin-top: 5px;
+  gap: 8px;
+  margin-top: 4px;
 }
 
 .btn-save {
-  background: #42b883;
-  color: white;
+  background: var(--accent);
+  color: var(--accent-text);
   border: none;
   padding: 8px;
-  border-radius: 6px;
+  border-radius: 8px;
   flex: 1;
   cursor: pointer;
-  font-weight: bold;
+  font-weight: 700;
+  font-size: 0.8rem;
+  font-family: inherit;
 }
 
 .btn-cancel {
-  background: #f43f5e;
-  color: white;
-  border: none;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
   padding: 8px;
-  border-radius: 6px;
+  border-radius: 8px;
   flex: 1;
   cursor: pointer;
-  font-weight: bold;
+  font-weight: 700;
+  font-size: 0.8rem;
+  font-family: inherit;
 }
 </style>

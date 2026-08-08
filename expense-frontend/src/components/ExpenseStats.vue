@@ -8,17 +8,14 @@ const props = defineProps({
   }
 });
 
-// --- SUMA CAŁKOWITA ---
+const monthlyLimit = 2000;
+
 const totalAmount = computed(() => {
   return props.expenses
     .reduce((sum, item) => sum + Number(item.amount || item.kwota || 0), 0)
     .toLocaleString('pl-PL', { minimumFractionDigits: 2 });
 });
 
-// --- LOGIKA BUDŻETU I BIEŻĄCEGO MIESIĄCA ---
-const monthlyLimit = 2000;
-
-// 1. Zmienna z surową wartością liczbową (potrzebna do wyliczenia procentów)
 const monthlyAmountRaw = computed(() => {
   const now = new Date();
   const currentMonth = now.getMonth();
@@ -32,20 +29,27 @@ const monthlyAmountRaw = computed(() => {
     .reduce((sum, item) => sum + Number(item.amount || item.kwota || 0), 0);
 });
 
-// 2. Zmienna z ładnym polskim formatowaniem (do wyświetlenia na ekranie)
 const monthlyAmount = computed(() => {
   return monthlyAmountRaw.value.toLocaleString('pl-PL', { minimumFractionDigits: 2 });
 });
 
-// 3. Obliczenie zapełnienia paska (max 100%)
 const budgetPercentage = computed(() => {
   const percentage = (monthlyAmountRaw.value / monthlyLimit) * 100;
-  return Math.min(percentage, 100).toFixed(1);
+  return percentage.toFixed(1);
 });
 
-// 4. Sprawdzenie, czy wydatki przekraczają 80% limitu
-const isOverBudget = computed(() => {
-  return (monthlyAmountRaw.value / monthlyLimit) * 100 > 80;
+const barWidth = computed(() => {
+  const percentage = (monthlyAmountRaw.value / monthlyLimit) * 100;
+  return Math.min(percentage, 100);
+});
+
+const isWarning = computed(() => {
+  const pct = (monthlyAmountRaw.value / monthlyLimit) * 100;
+  return pct >= 75 && pct < 100;
+});
+
+const isDanger = computed(() => {
+  return (monthlyAmountRaw.value / monthlyLimit) * 100 >= 100;
 });
 </script>
 
@@ -59,14 +63,12 @@ const isOverBudget = computed(() => {
       </div>
     </div>
 
-    <!-- KAFELEK Z PASKIEM POSTĘPU -->
     <div class="card">
       <div class="card-icon">📅</div>
       <div class="card-info">
         <h3>W tym miesiącu</h3>
         <p>{{ monthlyAmount }} zł</p>
 
-        <!-- Pasek budżetu -->
         <div class="budget-container">
           <div class="budget-info">
             <span>Limit: {{ monthlyLimit }} zł</span>
@@ -75,8 +77,8 @@ const isOverBudget = computed(() => {
           <div class="progress-bar-bg">
             <div 
               class="progress-bar-fill" 
-              :class="{ 'danger-mode': isOverBudget }"
-              :style="{ width: budgetPercentage + '%' }"
+              :class="{ 'warning-mode': isWarning, 'danger-mode': isDanger }"
+              :style="{ width: barWidth + '%' }"
             ></div>
           </div>
         </div>
@@ -102,13 +104,14 @@ const isOverBudget = computed(() => {
 }
 
 .card {
-  background: rgb(182, 182, 182);
+  background: var(--accent-text);
   padding: 1.5rem;
   border-radius: 16px;
   display: flex;
   align-items: center;
   gap: 1rem;
-  transition: transform 0.2s;
+  transition: transform 0.2s ease;
+  box-shadow: var(--shadow);
 }
 
 .card:hover {
@@ -122,26 +125,27 @@ const isOverBudget = computed(() => {
 }
 
 .card-info {
-  flex: 1; /* Pozwala sekcji informacyjnej zająć całą resztę miejsca (wymagane dla paska!) */
+  flex: 1;
   min-width: 0;
 }
 
 .card-info h3 {
   margin: 0;
   font-size: 0.8rem;
-  color: #6b7280;
+  color: var(--accent);
+  opacity: 0.8;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  font-weight: 700;
 }
 
 .card-info p {
   margin: 4px 0 0;
   font-size: 1.5rem;
   font-weight: 800;
-  color: #1f2937;
+  color: var(--accent);
 }
 
-/* --- STYLE DLA PASKA BUDŻETU --- */
 .budget-container {
   margin-top: 10px;
   width: 100%;
@@ -151,7 +155,7 @@ const isOverBudget = computed(() => {
   display: flex;
   justify-content: space-between;
   font-size: 0.75rem;
-  color: #4b5563; /* Ciemniejszy szary dla czytelności */
+  color: var(--accent);
   font-weight: 600;
   margin-bottom: 5px;
 }
@@ -159,19 +163,22 @@ const isOverBudget = computed(() => {
 .progress-bar-bg {
   height: 8px;
   width: 100%;
-  background: rgba(0, 0, 0, 0.15);
+  background: var(--accent-bg);
   border-radius: 10px;
   overflow: hidden;
 }
 
 .progress-bar-fill {
   height: 100%;
-  background: #10b981; /* Zielony */
+  background: var(--accent);
   border-radius: 10px;
   transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s ease;
 }
 
-/* Zmienia kolor na czerwony, jeśli aktywuje się 'danger-mode' */
+.progress-bar-fill.warning-mode {
+  background: #f97316; 
+}
+
 .progress-bar-fill.danger-mode {
   background: #ef4444; 
 }

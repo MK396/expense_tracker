@@ -14,11 +14,24 @@ const categories = ref([])
 const newCategoryName = ref('')
 const showAddCategory = ref(false)
 
-// 1. Pobieranie kategorii z API przy montowaniu komponentu
+// Słownik emotikon dla kategorii
+const categoryEmojis = {
+  'Jedzenie': '🍔',
+  'Alkohol': '🍷',
+  'Transport': '🚗',
+  'Dom': '🏠',
+  'Sport': '🏋️',
+  'Restauracje': '🍽️',
+  'Edukacja': '📚',
+  'Prezenty': '🎁'
+}
+
+const getEmoji = (catName) => categoryEmojis[catName] || '🏷️'
+
+// 1. Pobieranie kategorii z API
 const fetchCategories = async () => {
   try {
     const { data } = await axios.get('http://127.0.0.1:8000/api/categories/')
-         
     categories.value = data.map(cat => cat.name)
     
     if (categories.value.length > 0 && !category.value) {
@@ -34,7 +47,6 @@ const addNewCategory = async () => {
   const trimmed = newCategoryName.value.trim()
   if (trimmed && !categories.value.includes(trimmed)) {
     try {
-      // Wysyłamy nową kategorię do API
       await axios.post('http://127.0.0.1:8000/api/categories/', { name: trimmed })
       
       categories.value.push(trimmed)
@@ -76,32 +88,50 @@ onMounted(fetchCategories)
 </script>
 
 <template>
-  <div class="form-container">
-    <input v-model="amount" type="number" placeholder="Kwota" />
-    <input v-model="name" type="text" placeholder="Nazwa wydatku" />
-    <input v-model="date" type="date" class="date-input" @click="$event.target.showPicker?.()" />
-    
+  <div class="form-card">
+    <div class="form-header">
+      <div class="card-icon">➕</div>
+      <h3>Dodaj Nowy Wydatek</h3>
+    </div>
+
+    <div class="inputs-grid">
+      <div class="input-group">
+        <label>Kwota (zł)</label>
+        <input v-model="amount" type="number" step="0.01" placeholder="0.00" class="amount-input" />
+      </div>
+
+      <div class="input-group">
+        <label>Nazwa wydatku</label>
+        <input v-model="name" type="text" placeholder="np. Zakupy spożywcze" />
+      </div>
+
+      <div class="input-group">
+        <label>Data</label>
+        <input v-model="date" type="date" class="date-input" @click="$event.target.showPicker?.()" />
+      </div>
+    </div>
+
     <div class="category-section">
-      <label>Kategoria:</label>
+      <label>Kategoria</label>
       <div class="category-picker">
-          <button 
-            v-for="cat in categories" 
-            :key="cat"
-            type="button"
-            :class="['category-btn', { active: category === cat }]"
-            @click="category = cat"
-          >
-            {{ cat }}
-          </button>
-          
-          <button 
-            v-if="!showAddCategory"
-            type="button" 
-            class="category-btn add-btn" 
-            @click="showAddCategory = true"
-          >
-            + Nowa
-          </button>
+        <button 
+          v-for="cat in categories" 
+          :key="cat"
+          type="button"
+          :class="['category-btn', { active: category === cat }]"
+          @click="category = cat"
+        >
+          <span>{{ getEmoji(cat) }}</span> {{ cat }}
+        </button>
+        
+        <button 
+          v-if="!showAddCategory"
+          type="button" 
+          class="category-btn add-btn" 
+          @click="showAddCategory = true"
+        >
+          ➕ Nowa
+        </button>
       </div>
 
       <div v-if="showAddCategory" class="add-category-input">
@@ -111,8 +141,8 @@ onMounted(fetchCategories)
           placeholder="Nazwa kategorii..." 
           @keyup.enter="addNewCategory"
         />
-        <button type="button" @click="addNewCategory">Dodaj</button>
-        <button type="button" class="cancel-btn" @click="showAddCategory = false">✕</button>
+        <button type="button" class="btn-save-cat" @click="addNewCategory">Dodaj</button>
+        <button type="button" class="btn-cancel-cat" @click="showAddCategory = false">✕</button>
       </div>
     </div>
 
@@ -121,77 +151,183 @@ onMounted(fetchCategories)
 </template>
 
 <style scoped>
+/* GŁÓWNY POJEMNIK W STYLU KAFELKA PODSUMOWANIA */
+.form-card {
+  background: var(--accent-text);
+  padding: 1.5rem;
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  box-sizing: border-border-box;
+}
+
+.form-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.card-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.form-header h3 {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--accent);
+  opacity: 0.8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+}
+
+/* SIATKA INPUTÓW */
+.inputs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+}
+
+.input-group label,
+.category-section label {
+  font-size: 0.75rem;
+  color: var(--accent);
+  opacity: 0.8;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+input {
+  background: var(--bg);
+  color: var(--text-h);
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  font-size: 0.95rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+input:focus {
+  border-color: var(--accent);
+}
+
+.amount-input {
+  font-weight: 800;
+  color: var(--accent);
+}
+
+/* SEKCJA KATEGORII */
 .category-section {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-}
-.category-section label {
-  font-size: 0.9rem;
-  color: var(--text);
-  font-weight: 600;
+  gap: 6px;
   text-align: left;
 }
+
 .category-picker {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  margin-top: 4px;
 }
+
+.category-btn {
+  background: var(--bg);
+  color: var(--accent);
+  border: 1px solid var(--border);
+  padding: 6px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.category-btn:hover {
+  background: var(--accent-bg);
+}
+
+.category-btn.active {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent);
+}
+
 .add-btn {
-  border: 1px dashed var(--accent) !important;
-  color: var(--accent) !important;
-  background: transparent !important;
+  border: 1px dashed var(--accent);
+  background: transparent;
+  color: var(--accent);
 }
+
+/* INPUT DLA NOWEJ KATEGORII */
 .add-category-input {
   display: flex;
   gap: 8px;
-  margin-top: 5px;
-  animation: fadeIn 0.3s ease;
+  margin-top: 6px;
+  animation: fadeIn 0.2s ease;
 }
-.cancel-btn {
-  background: #ff7675 !important;
+
+.add-category-input input {
+  flex: 1;
 }
+
+.btn-save-cat {
+  background: var(--accent);
+  color: var(--accent-text);
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-cancel-cat {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* PRZYCISK SUBMIT */
 .submit-btn {
-  margin-top: 10px;
   background-color: var(--accent);
-  color: white;
-  font-size: 1.1rem;
+  color: var(--accent-text);
+  font-size: 1rem;
+  font-weight: 800;
   border: none;
   padding: 12px;
   border-radius: 8px;
   cursor: pointer;
+  margin-top: 4px;
+  transition: opacity 0.2s ease, transform 0.1s ease;
 }
+
+.submit-btn:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(-5px); }
+  from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: translateY(0); }
-}
-.form-container {
-  background: var(--code-bg);
-  padding: 20px;
-  border-radius: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  border: 1px solid var(--border);
-}
-input {
-  background: var(--bg);
-  color: var(--text-h);
-  padding: 10px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-}
-.category-btn {
-  background: var(--bg);
-  color: var(--text);
-  border: 1px solid var(--border);
-  padding: 8px 16px;
-  border-radius: 20px;
-  cursor: pointer;
-  font-size: 14px;
-}
-.category-btn.active {
-  background-color: var(--accent);
-  color: white;
 }
 </style>

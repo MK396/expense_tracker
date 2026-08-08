@@ -21,6 +21,20 @@ const usedModel = ref('') // przechowuje model zwrócony z API
 // STAN NA WYBÓR SKANERA (EasyOCR vs Gemini)
 const selectedEndpoint = ref('/api/scan/') 
 
+// Słownik emotikon dla kategorii
+const categoryEmojis = {
+  'Jedzenie': '🍔',
+  'Alkohol': '🍷',
+  'Transport': '🚗',
+  'Dom': '🏠',
+  'Sport': '🏋️',
+  'Restauracje': '🍽️',
+  'Edukacja': '📚',
+  'Prezenty': '🎁'
+}
+
+const getEmoji = (catName) => categoryEmojis[catName] || '🏷️'
+
 onMounted(async () => {
   try {
     const { data } = await axios.get('http://127.0.0.1:8000/api/categories/')
@@ -72,7 +86,7 @@ const handleFileUpload = async (event) => {
       products.value = scanResult.produkty.map(p => ({
         ...p,
         selected: true,
-        split: false, // Inicjalizacja stanu dzielenia na pół jako "false"
+        split: false,
         category: categories.value.length > 0 ? categories.value[0] : ''
       }))
     }
@@ -97,14 +111,12 @@ const saveSelected = async () => {
 
   selectedProducts.forEach(p => {
     const cat = p.category
-    
-    // Obliczamy ostateczną kwotę w zależności od zaznaczenia checkboxa "½"
     const originalAmount = parseFloat(p.amount) || 0
     const finalAmount = p.split ? (originalAmount / 2) : originalAmount
 
     if (!groupedExpenses[cat]) {
       groupedExpenses[cat] = {
-        name: shopName.value, 
+        name: shopName.value || 'Zakupy (Paragon)', 
         amount: 0,
         category: cat,
         date: new Date().toISOString().split('T')[0],
@@ -115,7 +127,6 @@ const saveSelected = async () => {
     groupedExpenses[cat].amount += finalAmount
     
     groupedExpenses[cat].details.push({
-      // Jeśli produkt był dzielony, dodajemy czytelny dopisek (½) w historii bazy danych
       name: p.split ? `${p.name} (½)` : p.name,
       amount: parseFloat(finalAmount.toFixed(2))
     })
@@ -137,129 +148,201 @@ const saveSelected = async () => {
 </script>
 
 <template>
-  <div class="scanner-container">
-    <h2>Skaner Paragonów</h2>
-    
+  <div class="scanner-card">
+    <div class="card-header">
+      <div class="card-icon">🧾</div>
+      <h3>Skaner Paragonów</h3>
+    </div>
+
+    <!-- SEKCJA ŁADOWANIA -->
     <div v-if="isLoading" class="loading-box">
       <div class="spinner"></div>
-      <p class="loading-text">Analizowanie...</p>
+      <p class="loading-text">Analizowanie paragonu...</p>
       <p class="sub-loading-text">{{ currentStatusMessage }}</p>
     </div>
 
+    <!-- WYSYŁANIE PLIKU -->
     <div v-else class="upload-section">
       <input type="file" ref="fileInput" accept="image/*" style="display: none" @change="handleFileUpload" />
       
-      <button class="upload-btn" @click="triggerScan('/api/scan/')">
-        Skanuj (EasyOCR - Lokalnie)
-      </button>
+      <div class="scan-buttons-grid">
+        <button class="upload-btn" @click="triggerScan('/api/scan/')">
+          ⚡ Skanuj (EasyOCR - Lokalnie)
+        </button>
 
-      <button class="upload-btn btn-gemini" @click="triggerScan('/api/scan-gemini/')">
-        Skanuj (Gemini AI - Chmura)
-      </button>
+        <button class="upload-btn btn-gemini" @click="triggerScan('/api/scan-gemini/')">
+          ✨ Skanuj (Gemini AI - Chmura)
+        </button>
+      </div>
     </div>
 
+    <!-- WYNIKI SKANOWANIA -->
     <div v-if="products.length > 0" class="results-section">
       <div class="metadata-box">
-        <p><strong>Sklep:</strong> {{ shopName }}</p>
-        <p><strong>NIP:</strong> {{ shopNip }}</p>
-        <p><strong>Łączna suma:</strong> {{ totalSum }}</p>
-        <p v-if="usedModel" class="model-badge"><strong>Użyty model:</strong> {{ usedModel }}</p>
+        <div class="meta-item">
+          <span class="meta-label">Sklep:</span>
+          <span class="meta-value">{{ shopName || 'Nie rozpoznano' }}</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">NIP:</span>
+          <span class="meta-value">{{ shopNip || '-' }}</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Suma paragonu:</span>
+          <span class="meta-value amount-meta">{{ totalSum }} zł</span>
+        </div>
+        <div v-if="usedModel" class="meta-item model-badge">
+          <span class="meta-label">Model AI:</span>
+          <span class="meta-value">{{ usedModel }}</span>
+        </div>
       </div>
 
-      <table class="receipt-table">
-        <thead>
-          <tr>
-            <th>+</th>
-            <th>Produkt</th>
-            <th>Cena</th>
-            <th class="text-center">½</th> <!-- Nowa kolumna nagłówka -->
-            <th>Kategoria</th>
-          </tr>
-        </thead>
-        <tbody>
-          <!-- Dodajemy klasę CSS 'split-row' jeśli produkt ma zaznaczoną opcję dzielenia na pół -->
-          <tr v-for="(prod, idx) in products" :key="idx" :class="{ 'split-row': prod.split }">
-            <td><input type="checkbox" v-model="prod.selected" /></td>
-            <td><input type="text" v-model="prod.name" class="table-input" /></td>
-            <td>
-              <div class="price-container">
-                <input type="number" step="0.01" v-model="prod.amount" class="table-input amount-input" />
-                <!-- Podgląd ceny po podziale na pół (na żywo) -->
-                <span v-if="prod.split" class="split-preview">
-                  ({{ (prod.amount / 2).toFixed(2) }})
-                </span>
-              </div>
-            </td>
-            <!-- Kolumna z checkboxem do dzielenia ceny na pół -->
-            <td class="text-center">
-              <input type="checkbox" v-model="prod.split" class="split-checkbox" />
-            </td>
-            <td>
-              <select v-model="prod.category" class="table-input">
-                <option v-for="cat in categories" :key="cat" :value="cat">{{ cat }}</option>
-              </select>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <div class="table-wrapper">
+        <table class="receipt-table">
+          <thead>
+            <tr>
+              <th class="text-center">+</th>
+              <th>Produkt</th>
+              <th>Cena (zł)</th>
+              <th class="text-center">½</th>
+              <th>Kategoria</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(prod, idx) in products" :key="idx" :class="{ 'split-row': prod.split }">
+              <td class="text-center">
+                <input type="checkbox" v-model="prod.selected" class="custom-checkbox" />
+              </td>
+              <td>
+                <input type="text" v-model="prod.name" class="table-input" />
+              </td>
+              <td>
+                <div class="price-container">
+                  <input type="number" step="0.01" v-model="prod.amount" class="table-input amount-input" />
+                  <span v-if="prod.split" class="split-preview">
+                    ({{ (prod.amount / 2).toFixed(2) }})
+                  </span>
+                </div>
+              </td>
+              <td class="text-center">
+                <input type="checkbox" v-model="prod.split" class="split-checkbox" />
+              </td>
+              <td>
+                <select v-model="prod.category" class="table-input select-input">
+                  <option v-for="cat in categories" :key="cat" :value="cat">
+                    {{ getEmoji(cat) }} {{ cat }}
+                  </option>
+                </select>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
       
-      <button class="submit-btn" @click="saveSelected">Zapisz wybrane wydatki</button>
+      <button class="submit-btn" @click="saveSelected">Zapisz wybrane wydatki +</button>
     </div>
   </div>
 </template>
 
 <style scoped>
-.scanner-container {
-  background: var(--code-bg); 
-  padding: 20px; 
-  border-radius: 12px; 
-  max-width: 600px;
-  max-height: 85vh; 
-  overflow-y: auto; 
+/* GŁÓWNY POJEMNIK W STYLU KAFELKA PODSUMOWANIA */
+.scanner-card {
+  background: var(--accent-text);
+  padding: 1.5rem;
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  max-width: 650px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
-.scanner-container::-webkit-scrollbar {
-  width: 8px;
-}
-.scanner-container::-webkit-scrollbar-track {
-  background: transparent;
-}
-.scanner-container::-webkit-scrollbar-thumb {
-  background-color: #aa3bff; 
-  border-radius: 10px;
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
 }
 
-/* Style sekcji ładowania */
+.card-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.card-header h3 {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--accent);
+  opacity: 0.8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+}
+
+/* PRZYCISKI SKANOWANIA */
+.scan-buttons-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.upload-btn {
+  background: var(--accent);
+  color: var(--accent-text);
+  border: none;
+  padding: 12px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.95rem;
+  transition: opacity 0.2s ease, transform 0.1s ease;
+  width: 100%;
+}
+
+.upload-btn:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.btn-gemini {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+}
+
+/* SEKCJA ŁADOWANIA */
 .loading-box {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 30px 10px;
-  background: rgba(0, 0, 0, 0.03);
-  border-radius: 8px;
-  border: 1px dashed var(--border);
+  padding: 24px;
+  background: var(--accent-bg);
+  border-radius: 12px;
+  border: 1px dashed var(--accent);
 }
 
 .loading-text {
-  font-weight: bold;
-  font-size: 1.2rem;
-  margin: 10px 0 5px 0;
-  color: var(--text-h);
+  font-weight: 800;
+  font-size: 1rem;
+  margin: 12px 0 4px 0;
+  color: var(--accent);
 }
 
 .sub-loading-text {
-  font-size: 0.9rem;
-  color: #666;
+  font-size: 0.8rem;
+  color: var(--accent);
+  opacity: 0.8;
   text-align: center;
   font-style: italic;
+  margin: 0;
 }
 
 .spinner {
-  width: 30px;
-  height: 30px;
-  border: 3px solid #f3f3f3;
-  border-top: 3px solid #2563eb;
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--accent-bg);
+  border-top: 3px solid var(--accent);
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
@@ -269,46 +352,107 @@ const saveSelected = async () => {
   100% { transform: rotate(360deg); }
 }
 
-.upload-btn {
-  background: var(--accent); color: white; border: none; padding: 12px 20px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%;
+/* METADANE */
+.results-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
-
-.btn-gemini {
-  background: #2563eb; 
-  margin-top: 10px;
-}
-.btn-gemini:hover {
-  background: #1d4ed8;
-}
-
-.results-section { margin-top: 20px; }
 
 .metadata-box {
+  background: var(--accent-bg);
+  border-radius: 12px;
+  padding: 12px 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+  text-align: left;
+}
+
+.meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.meta-label {
+  font-size: 0.7rem;
+  color: var(--accent);
+  opacity: 0.8;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.meta-value {
+  font-size: 0.9rem;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.amount-meta {
+  font-size: 1.1rem;
+  font-weight: 800;
+}
+
+/* TABELA DANYCH */
+.table-wrapper {
+  max-height: 350px;
+  overflow-y: auto;
+  border-radius: 8px;
+}
+
+.receipt-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.receipt-table th {
+  padding: 8px;
+  font-size: 0.75rem;
+  color: var(--accent);
+  opacity: 0.8;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 2px solid var(--accent-bg);
+}
+
+.receipt-table td {
+  padding: 6px 4px;
+  vertical-align: middle;
+}
+
+.split-row {
+  background: var(--accent-bg);
+}
+
+.table-input {
   background: var(--bg);
-  border-left: 4px solid var(--accent);
-  padding: 10px 15px;
-  margin-bottom: 15px;
-  border-radius: 4px;
-}
-.metadata-box p {
-  margin: 5px 0;
-  color: var(--text);
-  font-size: 0.95em;
-}
-
-.model-badge {
+  color: var(--text-h);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
   font-size: 0.85rem;
-  color: #2563eb !important;
+  font-family: inherit;
+  width: 100%;
+  box-sizing: border-box;
+  outline: none;
 }
 
-.receipt-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
-.receipt-table th { text-align: left; padding-bottom: 10px; font-size: 0.9em; color: var(--text); }
-.receipt-table td { padding: 5px 0; vertical-align: middle; }
-.table-input { background: var(--bg); color: var(--text-h); border: 1px solid var(--border); border-radius: 4px; padding: 5px; width: 90%; }
-.amount-input { width: 70px; }
-.submit-btn { background: #42b883; color: white; border: none; padding: 12px; border-radius: 8px; width: 100%; cursor: pointer; font-weight: bold; }
+.table-input:focus {
+  border-color: var(--accent);
+}
 
-/* NOWE STYLE DLA PODZIAŁU CENY */
+.amount-input {
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.select-input {
+  cursor: pointer;
+}
+
 .price-container {
   display: flex;
   align-items: center;
@@ -316,22 +460,39 @@ const saveSelected = async () => {
 }
 
 .split-preview {
-  font-size: 0.8rem;
-  color: #2563eb;
-  font-weight: bold;
+  font-size: 0.75rem;
+  color: var(--accent);
+  font-weight: 800;
   white-space: nowrap;
-}
-
-.split-row {
-  background: rgba(37, 99, 235, 0.05); /* Delikatne podświetlenie wiersza */
 }
 
 .text-center {
   text-align: center;
 }
 
+.custom-checkbox,
 .split-checkbox {
   cursor: pointer;
+  accent-color: var(--accent);
   transform: scale(1.1);
+}
+
+/* PRZYCISK ZAPISU */
+.submit-btn {
+  background-color: var(--accent);
+  color: var(--accent-text);
+  font-size: 1rem;
+  font-weight: 800;
+  border: none;
+  padding: 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: opacity 0.2s ease, transform 0.1s ease;
+  width: 100%;
+}
+
+.submit-btn:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
 }
 </style>

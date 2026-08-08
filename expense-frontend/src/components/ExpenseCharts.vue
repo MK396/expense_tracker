@@ -9,10 +9,22 @@ import {
   LinearScale,
   Tooltip, 
   Legend, 
-  Title 
+  Title,
+  PieController,
+  BarController
 } from 'chart.js'
 
-ChartJS.register(ArcElement, BarElement, CategoryScale, LinearScale, Tooltip, Legend, Title)
+ChartJS.register(
+  ArcElement, 
+  BarElement, 
+  CategoryScale, 
+  LinearScale, 
+  Tooltip, 
+  Legend, 
+  Title,
+  PieController,
+  BarController
+)
 
 const props = defineProps({
   expenses: {
@@ -22,11 +34,68 @@ const props = defineProps({
   }
 })
 
-// Przełączniki stanu
-const timeRange = ref('30')          // Filtr zakresu czasu dla obu wykresów
-const barChartGrouping = ref('date') // Sposób grupowania na wykresie słupkowym
+const timeRange = defineModel('timeRange', { default: '30' })
+const barChartGrouping = ref('date') 
 
-// Filtrujemy wydatki na podstawie wybranego czasu dla obu wykresów
+// Funkcja pomocnicza do formatowania daty na DD-MM-YYYY
+const formatDate = (rawDate) => {
+  if (!rawDate) return ''
+  const d = new Date(rawDate)
+  if (isNaN(d.getTime())) return rawDate
+
+  const day = String(d.getDate()).padStart(2, '0')
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const year = d.getFullYear()
+
+  return `${day}-${month}-${year}`
+}
+
+const categoryEmojis = { 
+  'Jedzenie': '🍔', 
+  'Alkohol': '🍷', 
+  'Transport': '🚗', 
+  'Dom': '🏠', 
+  'Sport': '🏋️', 
+  'Restauracje': '🍽️', 
+  'Edukacja': '📚', 
+  'Prezenty': '🎁' 
+}
+
+const categoryColors = {
+  'Jedzenie': '#F8AD9D',
+  'Alkohol': '#FFD166',
+  'Transport': '#C77DFF',
+  'Dom': '#B8C0FF',
+  'Sport': '#74B9FF',
+  'Restauracje': '#F4ACB7',
+  'Edukacja': '#CBFFC0',
+  'Prezenty': '#FFEAA7',
+  'Inne': '#D3D3D3'
+}
+
+const getCategoryEmojiOnly = (categoryName) => {
+  return categoryEmojis[categoryName] || '🏷️'
+}
+
+const getCategoryColor = (categoryName) => {
+  if (categoryColors[categoryName]) {
+    return categoryColors[categoryName]
+  }
+
+  let hash = 0
+  const name = categoryName || 'Inne'
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash)
+  }
+  const hue = Math.abs(hash) % 360
+  return `hsl(${hue}, 65%, 75%)`
+}
+
+const getCategoryName = (category) => {
+  if (!category) return 'Inne'
+  return typeof category === 'object' ? (category.name || 'Inne') : category
+}
+
 const filteredExpenses = computed(() => {
   if (timeRange.value === 'all') {
     return props.expenses
@@ -42,12 +111,11 @@ const filteredExpenses = computed(() => {
   })
 })
 
-// Wykres kołowy pobiera dane przefiltrowane
 const pieChartData = computed(() => {
   const categoriesMap = {}
 
   filteredExpenses.value.forEach(expense => {
-    const category = expense.category || 'Inne'
+    const category = getCategoryName(expense.category)
     const amount = parseFloat(expense.amount) || 0
     
     if (categoriesMap[category]) {
@@ -57,11 +125,14 @@ const pieChartData = computed(() => {
     }
   })
 
+  const labels = Object.keys(categoriesMap)
+  const backgroundColors = labels.map(getCategoryColor)
+
   return {
-    labels: Object.keys(categoriesMap),
+    labels: labels, 
     datasets: [{
       label: 'Suma wydatków (zł)',
-      backgroundColor: ['#42b883', '#35495e', '#ff7675', '#74b9ff', '#a29bfe', '#ffeaa7', '#fab1a0'],
+      backgroundColor: backgroundColors,
       borderWidth: 2,
       borderColor: '#ffffff',
       data: Object.values(categoriesMap)
@@ -69,7 +140,6 @@ const pieChartData = computed(() => {
   }
 })
 
-// Wykres słupkowy - grupuje dane w zależności od wyboru użytkownika
 const barChartData = computed(() => {
   const groupedData = {}
   
@@ -77,39 +147,36 @@ const barChartData = computed(() => {
     const expDate = new Date(expense.date)
     const amount = parseFloat(expense.amount) || 0
     let key = ''
+    let displayKey = ''
     let sortKey = 0
 
     if (barChartGrouping.value === 'date') {
-      // Grupowanie dzień po dniu (YYYY-MM-DD)
       key = expense.date 
-      sortKey = key // sortowanie alfabetyczne po dacie zadziała
+      displayKey = formatDate(expense.date) // <-- Formatowanie daty na DD-MM-YYYY
+      sortKey = key 
     } 
     else if (barChartGrouping.value === 'dayOfWeek') {
-      // Grupowanie po dniach tygodnia
       const days = ['Niedziela', 'Poniedziałek', 'Wtorek', 'Środa', 'Czwartek', 'Piątek', 'Sobota']
       const dayIndex = expDate.getDay()
       key = days[dayIndex]
-      // Poniedziałek jako pierwszy dzień tygodnia (w Polsce) do sortowania
+      displayKey = key
       sortKey = dayIndex === 0 ? 7 : dayIndex 
     } 
     else if (barChartGrouping.value === 'month') {
-      // Grupowanie miesiącami (np. "Lipiec 2026")
       const months = ['Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec', 'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień']
       const monthIndex = expDate.getMonth()
       const year = expDate.getFullYear()
       key = `${months[monthIndex]} ${year}`
-      // Matematyczny klucz do sortowania chronologicznego (np. 202606)
+      displayKey = key
       sortKey = (year * 100) + monthIndex 
     }
 
-    // Dodawanie wartości do odpowiedniej grupy
     if (!groupedData[key]) {
-      groupedData[key] = { amount: 0, sortOrder: sortKey }
+      groupedData[key] = { amount: 0, sortOrder: sortKey, label: displayKey }
     }
     groupedData[key].amount += amount
   })
 
-  // Sortowanie wygenerowanych kluczy
   const sortedItems = Object.entries(groupedData).sort((a, b) => {
     if (a[1].sortOrder < b[1].sortOrder) return -1;
     if (a[1].sortOrder > b[1].sortOrder) return 1;
@@ -117,17 +184,17 @@ const barChartData = computed(() => {
   })
 
   return {
-    labels: sortedItems.map(item => item[0]),
+    labels: sortedItems.map(item => item[1].label),
     datasets: [{
       label: 'Suma wydatków (zł)',
-      backgroundColor: '#42b883',
+      backgroundColor: '#BDD9D7',
       borderRadius: 4,
       data: sortedItems.map(item => item[1].amount)
     }]
   }
 })
 
-const chartOptions = {
+const pieChartOptions = {
   responsive: true,
   maintainAspectRatio: false,
   plugins: {
@@ -142,9 +209,29 @@ const chartOptions = {
     tooltip: {
       callbacks: {
         label: function(context) {
-          const label = context.dataset.label || context.label || '';
+          const categoryName = context.label || '';
+          const emoji = getCategoryEmojiOnly(categoryName);
           const value = context.raw || 0;
-          return ` ${label}: ${value.toFixed(2)} zł`;
+          return ` ${emoji} : ${value.toFixed(2)} zł`;
+        }
+      }
+    }
+  }
+}
+
+// Opcje z wyłączoną legendą dla wykresu słupkowego
+const barChartOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: {
+      display: false // <-- UKRYCIE LEGENDRY POD WYKRESEM
+    },
+    tooltip: {
+      callbacks: {
+        label: function(context) {
+          const value = context.raw || 0;
+          return ` Suma: ${value.toFixed(2)} zł`;
         }
       }
     }
@@ -154,8 +241,6 @@ const chartOptions = {
 
 <template>
   <div class="chart-container">
-    
-    <!-- Paski z filtrami widoczne, jeśli są dane -->
     <div v-if="props.expenses.length > 0" class="controls-wrapper">
       <div class="control-group">
         <label for="time-range">Zakres czasu (Ogólny):</label>
@@ -177,26 +262,22 @@ const chartOptions = {
       </div>
     </div>
 
-    <!-- Wykresy -->
     <div v-if="filteredExpenses.length > 0" class="charts-grid">
       <div class="canvas-wrapper">
         <h4 class="chart-title">Podział na kategorie</h4>
-        <!-- Nowy kontener trzymający w ryzach sam wykres -->
         <div class="chart-area">
-          <Pie :data="pieChartData" :options="chartOptions" />
+          <Pie :data="pieChartData" :options="pieChartOptions" />
         </div>
       </div>
       
       <div class="canvas-wrapper">
         <h4 class="chart-title">Wydatki w czasie</h4>
-        <!-- Nowy kontener trzymający w ryzach sam wykres -->
         <div class="chart-area">
-          <Bar :data="barChartData" :options="chartOptions" />
+          <Bar :data="barChartData" :options="barChartOptions" />
         </div>
       </div>
     </div>
     
-    <!-- Komunikaty o braku danych -->
     <div v-else-if="props.expenses.length > 0" class="no-data-placeholder">
       <p>Brak wydatków w wybranym okresie czasu.</p>
     </div>
@@ -209,11 +290,10 @@ const chartOptions = {
 
 <style scoped>
 .chart-container {
-  background: white;
   padding: 25px;
   border-radius: 16px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
-  margin-bottom: 40px; /* Zmień tę wartość z 20px na 40px */
+  box-shadow: var(--shadow);
+  margin-bottom: 40px; 
 }
 
 .controls-wrapper {
@@ -223,7 +303,6 @@ const chartOptions = {
   gap: 20px;
   margin-bottom: 20px;
   padding-bottom: 15px;
-  border-bottom: 1px solid #f0f0f0;
 }
 
 .control-group {
@@ -234,16 +313,16 @@ const chartOptions = {
 
 .control-group label {
   font-size: 14px;
-  color: #555;
+  color: var(--accent);
   font-weight: 500;
 }
 
 .range-selector {
   padding: 8px 12px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--border);
   border-radius: 8px;
-  background-color: #f8f9fa;
-  color: #333; /* <-- Ta linijka naprawia problem z widocznością tekstu */
+  background-color: var(--bg);
+  color: var(--text-h); 
   font-family: inherit;
   outline: none;
   cursor: pointer;
@@ -251,12 +330,11 @@ const chartOptions = {
 }
 
 .range-selector:focus {
-  border-color: #42b883;
+  border-color: var(--accent);
 }
 
 .charts-grid {
   display: grid;
-  /* Automatycznie zawija do 1 kolumny, gdy brakuje miejsca (mniej niż 400px na wykres) */
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr));
   gap: 30px;
   width: 100%;
@@ -267,13 +345,34 @@ const chartOptions = {
   flex-direction: column;
   min-width: 0;
   width: 100%;
-  gap: 10px; /* Dodaje lekki odstęp między tytułem a wykresem */
+  gap: 10px; 
 }
 
 .chart-area {
   position: relative;
-  height: 320px; /* Definiujemy sztywną wysokość tylko dla samego wykresu */
+  height: 320px; 
   width: 100%;
+}
+
+.chart-title {
+  text-align: center;
+  color: var(--accent);
+  margin-bottom: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 0.85rem;
+  letter-spacing: 0.05em;
+}
+
+.no-data-placeholder {
+  height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  font-style: italic;
+  border: 2px dashed var(--accent);
+  border-radius: 12px;
 }
 
 @media (max-width: 768px) {
@@ -283,48 +382,5 @@ const chartOptions = {
   .controls-wrapper {
     justify-content: flex-start;
   }
-}
-
-.chart-title {
-  text-align: center;
-  color: #333;
-  margin-bottom: 10px;
-  font-weight: 600;
-}
-
-.no-data-placeholder {
-  height: 200px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #999;
-  font-style: italic;
-  border: 2px dashed #eee;
-  border-radius: 12px;
-}
-
-/* Tryb ciemny */
-:global([data-theme='dark']) .chart-container {
-  background: #2d2d2d;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-}
-
-:global([data-theme='dark']) .controls-wrapper {
-  border-bottom-color: #444;
-}
-
-:global([data-theme='dark']) .no-data-placeholder {
-  border-color: #444;
-}
-
-:global([data-theme='dark']) .chart-title,
-:global([data-theme='dark']) .control-group label {
-  color: #eee;
-}
-
-:global([data-theme='dark']) .range-selector {
-  background: #444;
-  color: white;
-  border-color: #555;
 }
 </style>
