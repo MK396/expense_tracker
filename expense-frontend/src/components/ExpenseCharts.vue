@@ -199,7 +199,7 @@ const pieChartOptions = {
   maintainAspectRatio: false,
   plugins: {
     legend: {
-      position: 'bottom',
+      position: 'left',
       labels: {
         usePointStyle: true,
         padding: 20,
@@ -264,14 +264,14 @@ const barChartOptions = {
 
     <div v-if="filteredExpenses.length > 0" class="charts-grid">
       <div class="canvas-wrapper">
-        <h4 class="chart-title">Podział na kategorie</h4>
+        <!--<h4 class="chart-title">Podział na kategorie</h4>-->
         <div class="chart-area">
           <Pie :data="pieChartData" :options="pieChartOptions" />
         </div>
       </div>
       
       <div class="canvas-wrapper">
-        <h4 class="chart-title">Wydatki w czasie</h4>
+        <!--<h4 class="chart-title">Wydatki w czasie</h4>-->
         <div class="chart-area">
           <Bar :data="barChartData" :options="barChartOptions" />
         </div>
@@ -350,7 +350,7 @@ const barChartOptions = {
 
 .chart-area {
   position: relative;
-  height: 320px; 
+  height: 420px; 
   width: 100%;
 }
 

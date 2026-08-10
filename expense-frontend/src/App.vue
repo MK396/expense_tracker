@@ -14,7 +14,11 @@ const expenses = ref([])
 const isDark = ref(false)
 const showForm = ref(false)
 const showScanner = ref(false)
-const timeRange = ref('30') // Główny stan zakresu czasu dla wykresów i listy
+const timeRange = ref('30')
+
+// Główny stan filtru miesiąca i roku
+const selectedMonth = ref(new Date().getMonth())
+const selectedYear = ref(new Date().getFullYear())
 
 const toggleTheme = () => {
   isDark.value = !isDark.value
@@ -30,19 +34,14 @@ const fetchExpenses = async () => {
   }
 }
 
-// Przefiltrowane wydatki przekazywane do wykresów i kafelków
-const filteredExpenses = computed(() => {
-  if (timeRange.value === 'all') {
-    return expenses.value
-  }
-  
-  const now = new Date()
+// Wyselekcjonowane wydatki dla wybranego miesiąca i roku (dla listy i statystyk)
+const monthlyFilteredExpenses = computed(() => {
   return expenses.value.filter(expense => {
-    const expDate = new Date(expense.date)
-    const diffTime = Math.abs(now - expDate)
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-    
-    return diffDays <= parseInt(timeRange.value)
+    const d = new Date(expense.date || expense.data)
+    return (
+      d.getMonth() === Number(selectedMonth.value) &&
+      d.getFullYear() === Number(selectedYear.value)
+    )
   })
 })
 
@@ -59,20 +58,28 @@ onMounted(fetchExpenses)
     <AppHeader 
       :is-dark="isDark" 
       :show-form="showForm"
+      :expenses="expenses"
+      v-model:selectedMonth="selectedMonth"
+      v-model:selectedYear="selectedYear"
       @toggle-theme="toggleTheme"
       @toggle-form="showForm = !showForm"
       @toggle-scanner="showScanner = !showScanner" 
     />
 
-    <ExpenseStats :expenses="expenses" />
+    <ExpenseStats 
+      :expenses="expenses" 
+      :selected-month="selectedMonth"
+      :selected-year="selectedYear"
+    />
     
     <ExpenseCharts 
       :expenses="expenses" 
       v-model:timeRange="timeRange" 
     />
 
+    <!-- Przekazujemy przefiltrowaną listę po wybranym miesiącu -->
     <ExpenseList 
-      :expenses="filteredExpenses" 
+      :expenses="monthlyFilteredExpenses" 
       @refresh-expenses="fetchExpenses" 
     />
 

@@ -9,9 +9,6 @@ const isLoading = ref(false)
 const products = ref([])
 const categories = ref([])
 
-// Nowy stan informujący o aktywnym skanerze
-const currentStatusMessage = ref('')
-
 // STANY NA METADANE
 const shopName = ref('')
 const shopNip = ref('')
@@ -46,11 +43,6 @@ onMounted(async () => {
 
 const triggerScan = (endpoint) => {
   selectedEndpoint.value = endpoint
-  if (endpoint.includes('gemini')) {
-    currentStatusMessage.value = 'Inicjalizacja Gemini AI... Sprawdzanie dostępności modeli.'
-  } else {
-    currentStatusMessage.value = 'Przetwarzanie lokalne (EasyOCR)...'
-  }
   fileInput.value.click()
 }
 
@@ -67,10 +59,6 @@ const handleFileUpload = async (event) => {
 
   const formData = new FormData()
   formData.append('receipt', file)
-
-  if (selectedEndpoint.value.includes('gemini')) {
-    currentStatusMessage.value = 'Wysyłanie obrazu do chmury i analiza dokumentu...'
-  }
 
   try {
     const { data } = await axios.post(`http://127.0.0.1:8000${selectedEndpoint.value}`, formData)
@@ -95,7 +83,6 @@ const handleFileUpload = async (event) => {
     console.error(error)
   } finally {
     isLoading.value = false
-    currentStatusMessage.value = ''
     if (fileInput.value) fileInput.value.value = ''
   }
 }
@@ -150,15 +137,13 @@ const saveSelected = async () => {
 <template>
   <div class="scanner-card">
     <div class="card-header">
-      <div class="card-icon">🧾</div>
       <h3>Skaner Paragonów</h3>
     </div>
 
     <!-- SEKCJA ŁADOWANIA -->
     <div v-if="isLoading" class="loading-box">
       <div class="spinner"></div>
-      <p class="loading-text">Analizowanie paragonu...</p>
-      <p class="sub-loading-text">{{ currentStatusMessage }}</p>
+      <p class="loading-text">Analizowanie paragonu</p>
     </div>
 
     <!-- WYSYŁANIE PLIKU -->
@@ -167,11 +152,11 @@ const saveSelected = async () => {
       
       <div class="scan-buttons-grid">
         <button class="upload-btn" @click="triggerScan('/api/scan/')">
-          ⚡ Skanuj (EasyOCR - Lokalnie)
+          Skanuj (EasyOCR - Lokalnie)
         </button>
 
         <button class="upload-btn btn-gemini" @click="triggerScan('/api/scan-gemini/')">
-          ✨ Skanuj (Gemini AI - Chmura)
+          Skanuj (Gemini AI - Chmura)
         </button>
       </div>
     </div>
@@ -265,11 +250,6 @@ const saveSelected = async () => {
   gap: 0.75rem;
 }
 
-.card-icon {
-  font-size: 1.5rem;
-  line-height: 1;
-}
-
 .card-header h3 {
   margin: 0;
   font-size: 0.85rem;
@@ -327,15 +307,6 @@ const saveSelected = async () => {
   font-size: 1rem;
   margin: 12px 0 4px 0;
   color: var(--accent);
-}
-
-.sub-loading-text {
-  font-size: 0.8rem;
-  color: var(--accent);
-  opacity: 0.8;
-  text-align: center;
-  font-style: italic;
-  margin: 0;
 }
 
 .spinner {

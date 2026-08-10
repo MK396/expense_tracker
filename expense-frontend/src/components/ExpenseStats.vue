@@ -5,32 +5,84 @@ const props = defineProps({
   expenses: {
     type: Array,
     required: true
+  },
+  selectedMonth: {
+    type: Number,
+    default: () => new Date().getMonth()
+  },
+  selectedYear: {
+    type: Number,
+    default: () => new Date().getFullYear()
   }
 });
 
 const monthlyLimit = 2000;
+const now = new Date();
 
-const totalAmount = computed(() => {
-  return props.expenses
-    .reduce((sum, item) => sum + Number(item.amount || item.kwota || 0), 0)
-    .toLocaleString('pl-PL', { minimumFractionDigits: 2 });
+// Wydatki dla wybranego miesiąca
+const filteredMonthlyExpenses = computed(() => {
+  return props.expenses.filter(item => {
+    const d = new Date(item.date || item.data);
+    return (
+      d.getMonth() === Number(props.selectedMonth) &&
+      d.getFullYear() === Number(props.selectedYear)
+    );
+  });
 });
 
+// Suma w wybranym miesiącu
 const monthlyAmountRaw = computed(() => {
-  const now = new Date();
-  const currentMonth = now.getMonth();
-  const currentYear = now.getFullYear();
-
-  return props.expenses
-    .filter(item => {
-      const d = new Date(item.date || item.data);
-      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-    })
+  return filteredMonthlyExpenses.value
     .reduce((sum, item) => sum + Number(item.amount || item.kwota || 0), 0);
 });
 
 const monthlyAmount = computed(() => {
   return monthlyAmountRaw.value.toLocaleString('pl-PL', { minimumFractionDigits: 2 });
+});
+
+// Pozostały budżet
+const remainingBudget = computed(() => {
+  const remaining = monthlyLimit - monthlyAmountRaw.value;
+  return remaining.toLocaleString('pl-PL', { minimumFractionDigits: 2 });
+});
+
+// Liczba dni w miesiącu oraz minione dni
+const daysInMonth = computed(() => {
+  return new Date(props.selectedYear, Number(props.selectedMonth) + 1, 0).getDate();
+});
+
+const elapsedDays = computed(() => {
+  const isCurrentMonth = 
+    Number(props.selectedYear) === now.getFullYear() && 
+    Number(props.selectedMonth) === now.getMonth();
+    
+  return isCurrentMonth ? now.getDate() : daysInMonth.value;
+});
+
+// Średnia dzienna
+const dailyAverageRaw = computed(() => {
+  return monthlyAmountRaw.value / (elapsedDays.value || 1);
+});
+
+const dailyAverage = computed(() => {
+  return dailyAverageRaw.value.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+});
+
+// Prognoza na koniec miesiąca (raw numeryczna)
+const forecastAmountRaw = computed(() => {
+  return dailyAverageRaw.value * daysInMonth.value;
+});
+
+const forecastAmount = computed(() => {
+  return forecastAmountRaw.value.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+});
+
+// Największy wydatek
+const topExpense = computed(() => {
+  if (filteredMonthlyExpenses.value.length === 0) return null;
+  return [...filteredMonthlyExpenses.value].sort((a, b) => 
+    Number(b.amount || b.kwota || 0) - Number(a.amount || a.kwota || 0)
+  )[0];
 });
 
 const budgetPercentage = computed(() => {
@@ -43,6 +95,7 @@ const barWidth = computed(() => {
   return Math.min(percentage, 100);
 });
 
+// Stany koloru paska postępu
 const isWarning = computed(() => {
   const pct = (monthlyAmountRaw.value / monthlyLimit) * 100;
   return pct >= 75 && pct < 100;
@@ -51,23 +104,51 @@ const isWarning = computed(() => {
 const isDanger = computed(() => {
   return (monthlyAmountRaw.value / monthlyLimit) * 100 >= 100;
 });
+
+// Stany koloru tekstu prognozy
+const isForecastWarning = computed(() => {
+  const pct = (forecastAmountRaw.value / monthlyLimit) * 100;
+  return pct >= 75 && pct < 100;
+});
+
+const isForecastDanger = computed(() => {
+  return (forecastAmountRaw.value / monthlyLimit) * 100 >= 100;
+});
 </script>
 
 <template>
   <div class="stats-container">
+    <!-- KARTA 1: ŚREDNIA DZIENNA I PROGNOZA NA KONIEC MIESIĄCA -->
     <div class="card">
-      <div class="card-icon">💰</div>
       <div class="card-info">
-        <h3>Suma całkowita</h3>
-        <p>{{ totalAmount }} zł</p>
+        <div class="card-split">
+          <div class="split-col">
+            <h3>Średnio dziennie</h3>
+            <p>{{ dailyAverage }} zł</p>
+          </div>
+          <div class="split-col">
+            <h3>Prognoza</h3>
+            <p :class="{ 'text-warning': isForecastWarning, 'text-danger': isForecastDanger }">
+              {{ forecastAmount }} zł
+            </p>
+          </div>
+        </div>
       </div>
     </div>
 
+    <!-- KARTA 2: WYDATKI MIESIĘCZNE I POZOSTAŁY BUDŻET -->
     <div class="card">
-      <div class="card-icon">📅</div>
       <div class="card-info">
-        <h3>W tym miesiącu</h3>
-        <p>{{ monthlyAmount }} zł</p>
+        <div class="card-split">
+          <div class="split-col">
+            <h3>W tym miesiącu</h3>
+            <p>{{ monthlyAmount }} zł</p>
+          </div>
+          <div class="split-col">
+            <h3>Pozostało</h3>
+            <p>{{ remainingBudget }} zł</p>
+          </div>
+        </div>
 
         <div class="budget-container">
           <div class="budget-info">
@@ -85,11 +166,17 @@ const isDanger = computed(() => {
       </div>
     </div>
 
+    <!-- KARTA 3: NAJWIĘKSZY WYDATEK -->
     <div class="card">
-      <div class="card-icon">📊</div>
       <div class="card-info">
-        <h3>Liczba wpisów</h3>
-        <p>{{ expenses.length }}</p>
+        <h3>Największy wydatek</h3>
+        <p v-if="topExpense">
+          {{ Number(topExpense.amount || topExpense.kwota || 0).toLocaleString('pl-PL', { minimumFractionDigits: 2 }) }} zł
+        </p>
+        <p v-else>-</p>
+        <small v-if="topExpense" class="top-expense-title">
+          {{ topExpense.title || topExpense.nazwa || topExpense.category }}
+        </small>
       </div>
     </div>
   </div>
@@ -98,7 +185,7 @@ const isDanger = computed(() => {
 <style scoped>
 .stats-container {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 1.5rem;
   margin-bottom: 2rem;
 }
@@ -118,15 +205,25 @@ const isDanger = computed(() => {
   transform: translateY(-5px);
 }
 
-.card-icon {
-  font-size: 2rem;
-  padding: 10px;
-  border-radius: 12px;
-}
-
 .card-info {
   flex: 1;
   min-width: 0;
+}
+
+.card-split {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  text-align: center;
+}
+
+.split-col {
+  flex: 1;
+}
+
+.split-col:first-child {
+  border-right: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  padding-right: 1rem;
 }
 
 .card-info h3 {
@@ -144,10 +241,31 @@ const isDanger = computed(() => {
   font-size: 1.5rem;
   font-weight: 800;
   color: var(--accent);
+  transition: color 0.3s ease;
+}
+
+/* KOLOry tekstu prognozy */
+.text-warning {
+  color: #f97316 !important;
+}
+
+.text-danger {
+  color: #ef4444 !important;
+}
+
+.top-expense-title {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.85rem;
+  color: var(--accent);
+  opacity: 0.75;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .budget-container {
-  margin-top: 10px;
+  margin-top: 12px;
   width: 100%;
 }
 

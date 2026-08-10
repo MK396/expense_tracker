@@ -90,7 +90,6 @@ onMounted(fetchCategories)
 <template>
   <div class="form-card">
     <div class="form-header">
-      <div class="card-icon">➕</div>
       <h3>Dodaj Nowy Wydatek</h3>
     </div>
 
@@ -169,10 +168,6 @@ onMounted(fetchCategories)
   gap: 0.75rem;
 }
 
-.card-icon {
-  font-size: 1.5rem;
-  line-height: 1;
-}
 
 .form-header h3 {
   margin: 0;
