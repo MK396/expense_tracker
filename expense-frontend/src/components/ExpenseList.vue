@@ -2,7 +2,6 @@
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
 
-// Przyjmuje przefiltrowaną listę wydatków
 const props = defineProps({
   expenses: {
     type: Array,
@@ -14,7 +13,11 @@ const emit = defineEmits(['refresh-expenses'])
 
 const categories = ref([])
 
-// Funkcja formatująca datę z YYYY-MM-DD (lub ISO) na DD-MM-YYYY
+// Stany dla modalu edycji szczegółów paragonu
+const showReceiptModal = ref(false)
+const activeReceipt = ref(null)
+
+// Formatowanie daty z YYYY-MM-DD (lub ISO) na DD-MM-YYYY
 const formatDate = (rawDate) => {
   if (!rawDate) return ''
   const d = new Date(rawDate)
@@ -109,11 +112,18 @@ const deleteExpense = async (id) => {
   }
 }
 
-const toggleEdit = (expense) => {
-  expense.isEditing = true
-  expense.editName = expense.name
-  expense.editAmount = expense.amount
-  expense.editCategory = typeof expense.category === 'object' ? expense.category.name : expense.category
+// Inteligentne rozróżnienie edycji pod ikoną ołówka ✏️
+const handleEditClick = (expense) => {
+  if (expense.items && expense.items.length > 0) {
+    // Wydatek zeskanowany -> otwieramy modal z pozycjami paragonu
+    openReceiptDetails(expense)
+  } else {
+    // Wydatek dodany ręcznie -> włączamy edycję na kafelku
+    expense.isEditing = true
+    expense.editName = expense.name
+    expense.editAmount = expense.amount
+    expense.editCategory = typeof expense.category === 'object' ? expense.category.name : expense.category
+  }
 }
 
 const saveExpense = async (expense) => {
@@ -130,6 +140,36 @@ const saveExpense = async (expense) => {
     console.error(e)
   }
 }
+
+// Otwarcie modalu ze szczegółami paragonu
+const openReceiptDetails = (expense) => {
+  activeReceipt.value = JSON.parse(JSON.stringify(expense))
+  showReceiptModal.value = true
+}
+
+// Zapis zmian w pozycjach paragonu
+const saveReceiptItems = async () => {
+  try {
+    const newTotal = activeReceipt.value.items.reduce(
+      (sum, item) => sum + Number(item.amount || 0), 0
+    )
+
+    await axios.patch(`http://127.0.0.1:8000/api/expenses/${activeReceipt.value.id}/`, {
+      items: activeReceipt.value.items,
+      amount: newTotal
+    })
+
+    showReceiptModal.value = false
+    emit('refresh-expenses')
+  } catch (e) {
+    alert("Wystąpił błąd podczas zapisywania szczegółów paragonu.")
+    console.error(e)
+  }
+}
+
+const removeReceiptItem = (index) => {
+  activeReceipt.value.items.splice(index, 1)
+}
 </script>
 
 <template>
@@ -144,7 +184,8 @@ const saveExpense = async (expense) => {
                 <h3 :title="expense.name">{{ normalizeShopName(expense.name) }}</h3>
                 
                 <div class="card-actions">
-                  <button @click="toggleEdit(expense)" class="action-btn" title="Edytuj">✏️</button>
+                  <!-- OŁÓWEK REAGUJE NA TYP WYDATKU -->
+                  <button @click="handleEditClick(expense)" class="action-btn" title="Edytuj">✏️</button>
                   <button @click="deleteExpense(expense.id)" class="action-btn" title="Usuń">🗑️</button>
                 </div>
               </div>
@@ -160,6 +201,7 @@ const saveExpense = async (expense) => {
             >
               {{ typeof expense.category === 'object' ? expense.category.name : expense.category }}
             </span>
+
             <span class="date">{{ formatDate(expense.date) }}</span>
           </div>
         </template>
@@ -184,6 +226,32 @@ const saveExpense = async (expense) => {
     <div v-else class="no-data-msg">
       <p>Brak wydatków w wybranym przedziale czasowym.</p>
     </div>
+
+    <!-- MODAL EDYCJI POZYCJI PARAGONU -->
+    <div v-if="showReceiptModal" class="modal-backdrop" @click.self="showReceiptModal = false">
+      <div class="modal-card">
+        <h3>Szczegóły paragonu: {{ activeReceipt.name }}</h3>
+        
+        <div class="items-list">
+          <div v-for="(item, index) in activeReceipt.items" :key="index" class="item-row">
+            <input v-model="item.name" class="edit-input flex-2" placeholder="Nazwa produktu" />
+            <input type="number" step="0.01" v-model="item.amount" class="edit-input flex-1 amount-input" placeholder="Cena" />
+            
+            <select v-model="item.category" class="edit-input flex-1">
+              <option v-for="cat in categories" :key="cat" :value="cat">{{ cat }}</option>
+            </select>
+
+            <button @click="removeReceiptItem(index)" class="btn-remove" title="Usuń pozycję">✕</button>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button @click="saveReceiptItems" class="btn-save">Zapisz i Przelicz</button>
+          <button @click="showReceiptModal = false" class="btn-cancel">Anuluj</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 </template>
 
@@ -372,5 +440,69 @@ const saveExpense = async (expense) => {
   font-weight: 700;
   font-size: 0.8rem;
   font-family: inherit;
+}
+
+.modal-backdrop {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(2px);
+}
+
+.modal-card {
+  background: var(--accent-text);
+  padding: 1.5rem;
+  border-radius: 16px;
+  width: 90%;
+  max-width: 550px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  box-shadow: var(--shadow);
+}
+
+.modal-card h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--accent);
+  text-align: center;
+}
+
+.items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 50vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.item-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.flex-1 { flex: 1; min-width: 0; }
+.flex-2 { flex: 2; min-width: 0; }
+
+.btn-remove {
+  background: transparent;
+  border: none;
+  color: #ef4444;
+  font-weight: bold;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
 }
 </style>

@@ -70,7 +70,8 @@ const handleSubmit = async () => {
     name: name.value,
     amount: parseFloat(amount.value),
     category: category.value,
-    date: date.value
+    date: date.value,
+    items: [] // <-- DODANO: pusta tablica pozycji dla ręcznie wprowadzanych wydatków
   }
 
   try {

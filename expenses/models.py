@@ -21,6 +21,7 @@ class Expense(models.Model):
         related_name='expenses'
     )
     date = models.DateField(default=timezone.now)
+    items = models.JSONField(default=list, blank=True, null=True)  # <-- NOWE POLE NA POZYCJE Z PARAGONU
 
     def __str__(self):
         cat_name = self.category.name if self.category else "Brak"

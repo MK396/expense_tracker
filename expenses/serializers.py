@@ -14,4 +14,4 @@ class ExpenseSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Expense
-        fields = ['id', 'name', 'amount', 'category', 'date']
+        fields = ['id', 'name', 'amount', 'category', 'date', 'items'] # <-- DODANO 'items'

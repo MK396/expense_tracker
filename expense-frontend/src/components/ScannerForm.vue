@@ -94,41 +94,38 @@ const saveSelected = async () => {
     return alert("Wybierz przynajmniej jeden produkt.")
   }
 
-  const groupedExpenses = {}
-
-  selectedProducts.forEach(p => {
-    const cat = p.category
+  // Budujemy tablicę szczegółowych pozycji dla całego paragonu
+  const itemsList = selectedProducts.map(p => {
     const originalAmount = parseFloat(p.amount) || 0
     const finalAmount = p.split ? (originalAmount / 2) : originalAmount
 
-    if (!groupedExpenses[cat]) {
-      groupedExpenses[cat] = {
-        name: shopName.value || 'Zakupy (Paragon)', 
-        amount: 0,
-        category: cat,
-        date: new Date().toISOString().split('T')[0],
-        details: []
-      }
-    }
-    
-    groupedExpenses[cat].amount += finalAmount
-    
-    groupedExpenses[cat].details.push({
+    return {
       name: p.split ? `${p.name} (½)` : p.name,
-      amount: parseFloat(finalAmount.toFixed(2))
-    })
+      amount: parseFloat(finalAmount.toFixed(2)),
+      category: p.category
+    }
   })
 
-  const toSave = Object.values(groupedExpenses).map(expense => ({
-    ...expense,
-    amount: parseFloat(expense.amount.toFixed(2))
-  }))
+  // Wyliczamy łączną sumę przefiltrowanych/podzielonych produktów
+  const calculatedTotal = itemsList.reduce((sum, item) => sum + item.amount, 0)
+
+  // Wybieramy dominującą kategorię (pierwszą dostępną)
+  const mainCategory = itemsList[0]?.category || 'Inne'
+
+  // Przygotowujemy pojedynczy obiekt wydatku zawierający tablicę 'items'
+  const expensePayload = {
+    name: shopName.value || 'Zakupy (Paragon)',
+    amount: parseFloat(calculatedTotal.toFixed(2)),
+    category: mainCategory,
+    date: new Date().toISOString().split('T')[0],
+    items: itemsList // <-- WŁAŚCIWE POLE ZAPISUJĄCE SZCZEGÓŁY PARAGONU
+  }
 
   try {
-    await axios.post('http://127.0.0.1:8000/api/expenses/', toSave)
+    await axios.post('http://127.0.0.1:8000/api/expenses/', expensePayload)
     emit('expenses-added')
   } catch (e) {
-    alert("Błąd zapisu. Upewnij się, że wybrane kategorie istnieją w bazie danych.")
+    alert("Błąd zapisu paragonu. Upewnij się, że kategoria istnieje w bazie.")
     console.error(e)
   }
 }
