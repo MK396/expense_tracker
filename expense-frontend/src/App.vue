@@ -74,7 +74,8 @@ onMounted(fetchExpenses)
     
     <ExpenseCharts 
       :expenses="expenses" 
-      v-model:timeRange="timeRange" 
+      :selected-month="selectedMonth" 
+      :selected-year="selectedYear" 
     />
 
     <!-- Przekazujemy przefiltrowaną listę po wybranym miesiącu -->

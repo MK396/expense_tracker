@@ -94,31 +94,33 @@ const saveSelected = async () => {
     return alert("Wybierz przynajmniej jeden produkt.")
   }
 
-  // Budujemy tablicę szczegółowych pozycji dla całego paragonu
+  // Zapisujemy pozycje – podział trzymamy w polu 'split', nie w nazwie!
   const itemsList = selectedProducts.map(p => {
     const originalAmount = parseFloat(p.amount) || 0
     const finalAmount = p.split ? (originalAmount / 2) : originalAmount
 
     return {
-      name: p.split ? `${p.name} (½)` : p.name,
-      amount: parseFloat(finalAmount.toFixed(2)),
-      category: p.category
+      name: p.name, // Czysta nazwa bez doklejania "(½)"
+      amount: parseFloat(p.amount), // Pierwotna kwota
+      category: p.category,
+      split: p.split // Flaga podziału
     }
   })
 
-  // Wyliczamy łączną sumę przefiltrowanych/podzielonych produktów
-  const calculatedTotal = itemsList.reduce((sum, item) => sum + item.amount, 0)
+  // Łączny koszt przeliczony pod kątem podziału
+  const calculatedTotal = selectedProducts.reduce((sum, p) => {
+    const amt = parseFloat(p.amount) || 0
+    return sum + (p.split ? amt / 2 : amt)
+  }, 0)
 
-  // Wybieramy dominującą kategorię (pierwszą dostępną)
   const mainCategory = itemsList[0]?.category || 'Inne'
 
-  // Przygotowujemy pojedynczy obiekt wydatku zawierający tablicę 'items'
   const expensePayload = {
     name: shopName.value || 'Zakupy (Paragon)',
     amount: parseFloat(calculatedTotal.toFixed(2)),
     category: mainCategory,
     date: new Date().toISOString().split('T')[0],
-    items: itemsList // <-- WŁAŚCIWE POLE ZAPISUJĄCE SZCZEGÓŁY PARAGONU
+    items: itemsList
   }
 
   try {

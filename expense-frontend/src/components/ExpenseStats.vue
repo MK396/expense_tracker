@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue';
+import { ref, computed } from 'vue';
 
 const props = defineProps({
   expenses: {
@@ -16,7 +16,28 @@ const props = defineProps({
   }
 });
 
-const monthlyLimit = 2000;
+// POBIERANIE ZAPISANEGO LIMITU Z LOCALSTORAGE LUB WARTOŚĆ DOMYŚLNA 2000 ZŁ
+const savedLimit = localStorage.getItem('user_monthly_limit');
+const monthlyLimit = ref(savedLimit ? Number(savedLimit) : 2000);
+
+// STANY DLA EDYCJI LIMITU
+const isEditingLimit = ref(false);
+const tempLimit = ref(monthlyLimit.value);
+
+const startEditingLimit = () => {
+  tempLimit.value = monthlyLimit.value;
+  isEditingLimit.value = true;
+};
+
+const saveLimit = () => {
+  const val = Number(tempLimit.value);
+  if (!isNaN(val) && val > 0) {
+    monthlyLimit.value = val;
+    localStorage.setItem('user_monthly_limit', val);
+  }
+  isEditingLimit.value = false;
+};
+
 const now = new Date();
 
 // Wydatki dla wybranego miesiąca
@@ -42,7 +63,7 @@ const monthlyAmount = computed(() => {
 
 // Pozostały budżet
 const remainingBudget = computed(() => {
-  const remaining = monthlyLimit - monthlyAmountRaw.value;
+  const remaining = monthlyLimit.value - monthlyAmountRaw.value;
   return remaining.toLocaleString('pl-PL', { minimumFractionDigits: 2 });
 });
 
@@ -86,33 +107,33 @@ const topExpense = computed(() => {
 });
 
 const budgetPercentage = computed(() => {
-  const percentage = (monthlyAmountRaw.value / monthlyLimit) * 100;
+  const percentage = (monthlyAmountRaw.value / monthlyLimit.value) * 100;
   return percentage.toFixed(1);
 });
 
 const barWidth = computed(() => {
-  const percentage = (monthlyAmountRaw.value / monthlyLimit) * 100;
+  const percentage = (monthlyAmountRaw.value / monthlyLimit.value) * 100;
   return Math.min(percentage, 100);
 });
 
 // Stany koloru paska postępu
 const isWarning = computed(() => {
-  const pct = (monthlyAmountRaw.value / monthlyLimit) * 100;
+  const pct = (monthlyAmountRaw.value / monthlyLimit.value) * 100;
   return pct >= 75 && pct < 100;
 });
 
 const isDanger = computed(() => {
-  return (monthlyAmountRaw.value / monthlyLimit) * 100 >= 100;
+  return (monthlyAmountRaw.value / monthlyLimit.value) * 100 >= 100;
 });
 
 // Stany koloru tekstu prognozy
 const isForecastWarning = computed(() => {
-  const pct = (forecastAmountRaw.value / monthlyLimit) * 100;
+  const pct = (forecastAmountRaw.value / monthlyLimit.value) * 100;
   return pct >= 75 && pct < 100;
 });
 
 const isForecastDanger = computed(() => {
-  return (forecastAmountRaw.value / monthlyLimit) * 100 >= 100;
+  return (forecastAmountRaw.value / monthlyLimit.value) * 100 >= 100;
 });
 </script>
 
@@ -152,7 +173,23 @@ const isForecastDanger = computed(() => {
 
         <div class="budget-container">
           <div class="budget-info">
-            <span>Limit: {{ monthlyLimit }} zł</span>
+            <!-- EDITABLE LIMIT -->
+            <span v-if="isEditingLimit" class="limit-edit-box">
+              Limit: 
+              <input 
+                v-model="tempLimit" 
+                type="number" 
+                class="limit-input" 
+                @keyup.enter="saveLimit"
+                @blur="saveLimit"
+                autofocus
+              /> zł
+            </span>
+
+            <span v-else class="limit-clickable" @click="startEditingLimit" title="Kliknij, aby zmienić limit">
+              Limit: {{ monthlyLimit }} zł ✏️
+            </span>
+
             <span>{{ budgetPercentage }}%</span>
           </div>
           <div class="progress-bar-bg">
@@ -244,7 +281,7 @@ const isForecastDanger = computed(() => {
   transition: color 0.3s ease;
 }
 
-/* KOLOry tekstu prognozy */
+/* Kolory tekstu prognozy */
 .text-warning {
   color: #f97316 !important;
 }
@@ -276,6 +313,33 @@ const isForecastDanger = computed(() => {
   color: var(--accent);
   font-weight: 600;
   margin-bottom: 5px;
+}
+
+.limit-clickable {
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.limit-clickable:hover {
+  opacity: 0.7;
+}
+
+.limit-edit-box {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.limit-input {
+  width: 70px;
+  background: var(--bg, #fff);
+  color: var(--accent, #333);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 1px 4px;
+  font-size: 0.75rem;
+  font-weight: bold;
+  outline: none;
 }
 
 .progress-bar-bg {

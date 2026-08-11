@@ -31,11 +31,18 @@ const props = defineProps({
     type: Array,
     required: true,
     default: () => []
+  },
+  selectedMonth: {
+    type: Number,
+    default: () => new Date().getMonth()
+  },
+  selectedYear: {
+    type: Number,
+    default: () => new Date().getFullYear()
   }
 })
 
-const timeRange = defineModel('timeRange', { default: '30' })
-const barChartGrouping = ref('date') 
+const barChartGrouping = ref('month')
 
 // Funkcja pomocnicza do formatowania daty na DD-MM-YYYY
 const formatDate = (rawDate) => {
@@ -96,25 +103,21 @@ const getCategoryName = (category) => {
   return typeof category === 'object' ? (category.name || 'Inne') : category
 }
 
-const filteredExpenses = computed(() => {
-  if (timeRange.value === 'all') {
-    return props.expenses
-  }
-  
-  const now = new Date()
+// 1. DANE FILTROWANE DLA WYKRESU KOŁOWEGO (Strictly wybrany miesiąc i rok)
+const pieChartExpenses = computed(() => {
   return props.expenses.filter(expense => {
     const expDate = new Date(expense.date)
-    const diffTime = Math.abs(now - expDate)
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-    
-    return diffDays <= parseInt(timeRange.value)
+    return (
+      expDate.getMonth() === Number(props.selectedMonth) &&
+      expDate.getFullYear() === Number(props.selectedYear)
+    )
   })
 })
 
 const pieChartData = computed(() => {
   const categoriesMap = {}
 
-  filteredExpenses.value.forEach(expense => {
+  pieChartExpenses.value.forEach(expense => {
     const category = getCategoryName(expense.category)
     const amount = parseFloat(expense.amount) || 0
     
@@ -140,22 +143,33 @@ const pieChartData = computed(() => {
   }
 })
 
+// 2. DANE FILTROWANE DLA WYKRESU SŁUPKOWEGO (Zależne od barChartGrouping)
+const barChartExpenses = computed(() => {
+  return props.expenses.filter(expense => {
+    const expDate = new Date(expense.date)
+
+    if (barChartGrouping.value === 'month' || barChartGrouping.value === 'year') {
+      return expDate.getFullYear() === Number(props.selectedYear)
+    }
+
+    return (
+      expDate.getMonth() === Number(props.selectedMonth) &&
+      expDate.getFullYear() === Number(props.selectedYear)
+    )
+  })
+})
+
 const barChartData = computed(() => {
   const groupedData = {}
   
-  filteredExpenses.value.forEach(expense => {
+  barChartExpenses.value.forEach(expense => {
     const expDate = new Date(expense.date)
     const amount = parseFloat(expense.amount) || 0
     let key = ''
     let displayKey = ''
     let sortKey = 0
 
-    if (barChartGrouping.value === 'date') {
-      key = expense.date 
-      displayKey = formatDate(expense.date) // <-- Formatowanie daty na DD-MM-YYYY
-      sortKey = key 
-    } 
-    else if (barChartGrouping.value === 'dayOfWeek') {
+    if (barChartGrouping.value === 'dayOfWeek') {
       const days = ['Niedziela', 'Poniedziałek', 'Wtorek', 'Środa', 'Czwartek', 'Piątek', 'Sobota']
       const dayIndex = expDate.getDay()
       key = days[dayIndex]
@@ -169,6 +183,12 @@ const barChartData = computed(() => {
       key = `${months[monthIndex]} ${year}`
       displayKey = key
       sortKey = (year * 100) + monthIndex 
+    }
+    else if (barChartGrouping.value === 'year') {
+      const year = expDate.getFullYear()
+      key = `${year}`
+      displayKey = key
+      sortKey = year 
     }
 
     if (!groupedData[key]) {
@@ -219,13 +239,12 @@ const pieChartOptions = {
   }
 }
 
-// Opcje z wyłączoną legendą dla wykresu słupkowego
 const barChartOptions = {
   responsive: true,
   maintainAspectRatio: false,
   plugins: {
     legend: {
-      display: false // <-- UKRYCIE LEGENDRY POD WYKRESEM
+      display: false
     },
     tooltip: {
       callbacks: {
@@ -243,43 +262,33 @@ const barChartOptions = {
   <div class="chart-container">
     <div v-if="props.expenses.length > 0" class="controls-wrapper">
       <div class="control-group">
-        <label for="time-range">Zakres czasu (Ogólny):</label>
-        <select id="time-range" v-model="timeRange" class="range-selector">
-          <option value="7">Ostatnie 7 dni</option>
-          <option value="30">Ostatnie 30 dni</option>
-          <option value="365">Ostatni rok</option>
-          <option value="all">Wszystko</option>
-        </select>
-      </div>
-
-      <div class="control-group">
         <label for="bar-grouping">Grupuj wykres słupkowy po:</label>
         <select id="bar-grouping" v-model="barChartGrouping" class="range-selector">
-          <option value="date">Konkretnych dniach</option>
           <option value="dayOfWeek">Dniach tygodnia</option>
           <option value="month">Miesiącach</option>
+          <option value="year">Roku</option>
         </select>
       </div>
     </div>
 
-    <div v-if="filteredExpenses.length > 0" class="charts-grid">
+    <div v-if="barChartExpenses.length > 0 || pieChartExpenses.length > 0" class="charts-grid">
       <div class="canvas-wrapper">
-        <!--<h4 class="chart-title">Podział na kategorie</h4>-->
-        <div class="chart-area">
+        <div v-if="pieChartExpenses.length > 0" class="chart-area">
           <Pie :data="pieChartData" :options="pieChartOptions" />
+        </div>
+        <div v-else class="no-data-placeholder">
+          <p>Brak wydatków w wybranym miesiącu.</p>
         </div>
       </div>
       
       <div class="canvas-wrapper">
-        <!--<h4 class="chart-title">Wydatki w czasie</h4>-->
-        <div class="chart-area">
+        <div v-if="barChartExpenses.length > 0" class="chart-area">
           <Bar :data="barChartData" :options="barChartOptions" />
         </div>
+        <div v-else class="no-data-placeholder">
+          <p>Brak danych dla wykresu słupkowego.</p>
+        </div>
       </div>
-    </div>
-    
-    <div v-else-if="props.expenses.length > 0" class="no-data-placeholder">
-      <p>Brak wydatków w wybranym okresie czasu.</p>
     </div>
 
     <div v-else class="no-data-placeholder">
@@ -352,16 +361,6 @@ const barChartOptions = {
   position: relative;
   height: 420px; 
   width: 100%;
-}
-
-.chart-title {
-  text-align: center;
-  color: var(--accent);
-  margin-bottom: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  font-size: 0.85rem;
-  letter-spacing: 0.05em;
 }
 
 .no-data-placeholder {

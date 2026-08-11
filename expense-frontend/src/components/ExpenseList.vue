@@ -17,6 +17,20 @@ const categories = ref([])
 const showReceiptModal = ref(false)
 const activeReceipt = ref(null)
 
+// Słownik emotikon dla kategorii (taki sam jak w skanerze)
+const categoryEmojis = {
+  'Jedzenie': '🍔',
+  'Alkohol': '🍷',
+  'Transport': '🚗',
+  'Dom': '🏠',
+  'Sport': '🏋️',
+  'Restauracje': '🍽️',
+  'Edukacja': '📚',
+  'Prezenty': '🎁'
+}
+
+const getEmoji = (catName) => categoryEmojis[catName] || '🏷️'
+
 // Formatowanie daty z YYYY-MM-DD (lub ISO) na DD-MM-YYYY
 const formatDate = (rawDate) => {
   if (!rawDate) return ''
@@ -141,22 +155,52 @@ const saveExpense = async (expense) => {
   }
 }
 
-// Otwarcie modalu ze szczegółami paragonu
+// Otwieranie modalu ze szczegółami paragonu
 const openReceiptDetails = (expense) => {
-  activeReceipt.value = JSON.parse(JSON.stringify(expense))
+  const cloned = JSON.parse(JSON.stringify(expense))
+  
+  cloned.items = cloned.items.map(item => {
+    // Sprawdzamy czy w nazwie był wcześniej napis (½) i czyścimy go, ustawiając split na true
+    const hasHalvesInName = item.name.includes('(½)')
+    const cleanName = item.name.replace(/\s*\(½\)/g, '').trim()
+    const isSplit = item.split || hasHalvesInName
+
+    return {
+      ...item,
+      name: cleanName,
+      split: isSplit,
+      // Jeśli nazwa miała (½), podwajamy kwotę w inpucie, by pokazać bazową cenę
+      amount: hasHalvesInName ? Number((item.amount * 2).toFixed(2)) : item.amount
+    }
+  })
+  
+  activeReceipt.value = cloned
   showReceiptModal.value = true
 }
 
 // Zapis zmian w pozycjach paragonu
 const saveReceiptItems = async () => {
   try {
-    const newTotal = activeReceipt.value.items.reduce(
-      (sum, item) => sum + Number(item.amount || 0), 0
-    )
+    const preparedItems = activeReceipt.value.items.map(item => {
+      const origAmount = parseFloat(item.amount) || 0
+      
+      return {
+        name: item.name.replace(/\s*\(½\)/g, '').trim(),
+        amount: parseFloat(origAmount.toFixed(2)),
+        category: item.category,
+        split: item.split
+      }
+    })
+
+    // Sumujemy połówki na potrzeby całkowitej kwoty wydatku
+    const newTotal = preparedItems.reduce((sum, item) => {
+      const amt = item.amount
+      return sum + (item.split ? amt / 2 : amt)
+    }, 0)
 
     await axios.patch(`http://127.0.0.1:8000/api/expenses/${activeReceipt.value.id}/`, {
-      items: activeReceipt.value.items,
-      amount: newTotal
+      items: preparedItems,
+      amount: parseFloat(newTotal.toFixed(2))
     })
 
     showReceiptModal.value = false
@@ -184,7 +228,6 @@ const removeReceiptItem = (index) => {
                 <h3 :title="expense.name">{{ normalizeShopName(expense.name) }}</h3>
                 
                 <div class="card-actions">
-                  <!-- OŁÓWEK REAGUJE NA TYP WYDATKU -->
                   <button @click="handleEditClick(expense)" class="action-btn" title="Edytuj">✏️</button>
                   <button @click="deleteExpense(expense.id)" class="action-btn" title="Usuń">🗑️</button>
                 </div>
@@ -232,17 +275,46 @@ const removeReceiptItem = (index) => {
       <div class="modal-card">
         <h3>Szczegóły paragonu: {{ activeReceipt.name }}</h3>
         
-        <div class="items-list">
-          <div v-for="(item, index) in activeReceipt.items" :key="index" class="item-row">
-            <input v-model="item.name" class="edit-input flex-2" placeholder="Nazwa produktu" />
-            <input type="number" step="0.01" v-model="item.amount" class="edit-input flex-1 amount-input" placeholder="Cena" />
-            
-            <select v-model="item.category" class="edit-input flex-1">
-              <option v-for="cat in categories" :key="cat" :value="cat">{{ cat }}</option>
-            </select>
-
-            <button @click="removeReceiptItem(index)" class="btn-remove" title="Usuń pozycję">✕</button>
-          </div>
+        <div class="table-wrapper">
+          <table class="receipt-table">
+            <thead>
+              <tr>
+                <th>Produkt</th>
+                <th>Cena (zł)</th>
+                <th class="text-center">½</th>
+                <th>Kategoria</th>
+                <th class="text-center"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(item, index) in activeReceipt.items" :key="index" :class="{ 'split-row': item.split }">
+                <td>
+                  <input type="text" v-model="item.name" class="table-input" />
+                </td>
+                <td>
+                  <div class="price-container">
+                    <input type="number" step="0.01" v-model="item.amount" class="table-input amount-input" />
+                    <span v-if="item.split" class="split-preview">
+                      ({{ (item.amount / 2).toFixed(2) }})
+                    </span>
+                  </div>
+                </td>
+                <td class="text-center">
+                  <input type="checkbox" v-model="item.split" class="split-checkbox" />
+                </td>
+                <td>
+                  <select v-model="item.category" class="table-input select-input">
+                    <option v-for="cat in categories" :key="cat" :value="cat">
+                      {{ getEmoji(cat) }} {{ cat }}
+                    </option>
+                  </select>
+                </td>
+                <td class="text-center">
+                  <button @click="removeReceiptItem(index)" class="btn-remove" title="Usuń pozycję">✕</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
 
         <div class="modal-actions">
@@ -420,12 +492,12 @@ const removeReceiptItem = (index) => {
   background: var(--accent);
   color: var(--accent-text);
   border: none;
-  padding: 8px;
+  padding: 10px;
   border-radius: 8px;
   flex: 1;
   cursor: pointer;
   font-weight: 700;
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   font-family: inherit;
 }
 
@@ -433,15 +505,16 @@ const removeReceiptItem = (index) => {
   background: transparent;
   color: var(--accent);
   border: 1px solid var(--accent);
-  padding: 8px;
+  padding: 10px;
   border-radius: 8px;
   flex: 1;
   cursor: pointer;
   font-weight: 700;
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   font-family: inherit;
 }
 
+/* MODAL DLA SZCZEGÓŁÓW PARAGONU */
 .modal-backdrop {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
@@ -458,7 +531,7 @@ const removeReceiptItem = (index) => {
   padding: 1.5rem;
   border-radius: 16px;
   width: 90%;
-  max-width: 550px;
+  max-width: 650px;
   max-height: 80vh;
   display: flex;
   flex-direction: column;
@@ -473,23 +546,82 @@ const removeReceiptItem = (index) => {
   text-align: center;
 }
 
-.items-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-height: 50vh;
+/* STYLIZACJA TABELI WEWNĄTRZ MODALU (IDENTYCZNA JAK W SKANERZE) */
+.table-wrapper {
+  max-height: 350px;
   overflow-y: auto;
-  padding-right: 4px;
+  border-radius: 8px;
 }
 
-.item-row {
+.receipt-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.receipt-table th {
+  padding: 8px;
+  font-size: 0.75rem;
+  color: var(--accent);
+  opacity: 0.8;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 2px solid var(--accent-bg);
+}
+
+.receipt-table td {
+  padding: 6px 4px;
+  vertical-align: middle;
+}
+
+.split-row {
+  background: var(--accent-bg);
+}
+
+.table-input {
+  background: var(--bg);
+  color: var(--text-h);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 0.85rem;
+  font-family: inherit;
+  width: 100%;
+  box-sizing: border-box;
+  outline: none;
+}
+
+.table-input:focus {
+  border-color: var(--accent);
+}
+
+.select-input {
+  cursor: pointer;
+}
+
+.price-container {
   display: flex;
-  gap: 6px;
   align-items: center;
+  gap: 6px;
 }
 
-.flex-1 { flex: 1; min-width: 0; }
-.flex-2 { flex: 2; min-width: 0; }
+.split-preview {
+  font-size: 0.75rem;
+  color: var(--accent);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.split-checkbox {
+  cursor: pointer;
+  accent-color: var(--accent);
+  transform: scale(1.1);
+}
 
 .btn-remove {
   background: transparent;
@@ -498,6 +630,7 @@ const removeReceiptItem = (index) => {
   font-weight: bold;
   cursor: pointer;
   padding: 4px 8px;
+  font-size: 1rem;
 }
 
 .modal-actions {
