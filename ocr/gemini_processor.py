@@ -17,6 +17,9 @@ def analizuj_paragon_gemini(file_path):
     img = Image.open(str(file_path)).convert('RGB')
     
     lista_modeli = [
+        "gemini-3.5-flash",
+        "gemini-3.1-flash-image",
+        "gemini-3.6-flash",
         "gemini-flash-latest"
     ]
     
