@@ -22,3 +22,5 @@ ocr/original/
 ocr/preprocessed/
 ocr/txt/
 ocr/ocr_cache.db
+staticfiles/
+media/
