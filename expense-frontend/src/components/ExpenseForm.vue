@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import axios from 'axios'
+import api from '../api'
 
 const emit = defineEmits(['expense-added'])
 
@@ -31,7 +31,7 @@ const getEmoji = (catName) => categoryEmojis[catName] || '🏷️'
 // 1. Pobieranie kategorii z API
 const fetchCategories = async () => {
   try {
-    const { data } = await axios.get('http://127.0.0.1:8000/api/categories/')
+    const { data } = await api.get('categories/')
     categories.value = data.map(cat => cat.name)
     
     if (categories.value.length > 0 && !category.value) {
@@ -47,7 +47,7 @@ const addNewCategory = async () => {
   const trimmed = newCategoryName.value.trim()
   if (trimmed && !categories.value.includes(trimmed)) {
     try {
-      await axios.post('http://127.0.0.1:8000/api/categories/', { name: trimmed })
+      await api.post('categories/', { name: trimmed })
       
       categories.value.push(trimmed)
       category.value = trimmed 
@@ -71,11 +71,11 @@ const handleSubmit = async () => {
     amount: parseFloat(amount.value),
     category: category.value,
     date: date.value,
-    items: [] // <-- DODANO: pusta tablica pozycji dla ręcznie wprowadzanych wydatków
+    items: []
   }
 
   try {
-    await axios.post('http://127.0.0.1:8000/api/expenses/', newExpense)
+    await api.post('expenses/', newExpense)
     name.value = ''
     amount.value = ''
     emit('expense-added')
@@ -151,7 +151,6 @@ onMounted(fetchCategories)
 </template>
 
 <style scoped>
-/* GŁÓWNY POJEMNIK W STYLU KAFELKA PODSUMOWANIA */
 .form-card {
   background: var(--accent-text);
   padding: 1.5rem;
@@ -160,7 +159,7 @@ onMounted(fetchCategories)
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
-  box-sizing: border-border-box;
+  box-sizing: border-box;
 }
 
 .form-header {
@@ -168,7 +167,6 @@ onMounted(fetchCategories)
   align-items: center;
   gap: 0.75rem;
 }
-
 
 .form-header h3 {
   margin: 0;
@@ -180,7 +178,6 @@ onMounted(fetchCategories)
   font-weight: 700;
 }
 
-/* SIATKA INPUTÓW */
 .inputs-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -225,7 +222,6 @@ input:focus {
   color: var(--accent);
 }
 
-/* SEKCJA KATEGORII */
 .category-section {
   display: flex;
   flex-direction: column;
@@ -271,7 +267,6 @@ input:focus {
   color: var(--accent);
 }
 
-/* INPUT DLA NOWEJ KATEGORII */
 .add-category-input {
   display: flex;
   gap: 8px;
@@ -303,7 +298,6 @@ input:focus {
   cursor: pointer;
 }
 
-/* PRZYCISK SUBMIT */
 .submit-btn {
   background-color: var(--accent);
   color: var(--accent-text);

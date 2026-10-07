@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import axios from 'axios'
+import api from '../api'
 
 const props = defineProps({
   expenses: {
@@ -12,12 +12,9 @@ const props = defineProps({
 const emit = defineEmits(['refresh-expenses'])
 
 const categories = ref([])
-
-// Stany dla modalu edycji szczegółów paragonu
 const showReceiptModal = ref(false)
 const activeReceipt = ref(null)
 
-// Słownik emotikon dla kategorii (taki sam jak w skanerze)
 const categoryEmojis = {
   'Jedzenie': '🍔',
   'Alkohol': '🍷',
@@ -31,7 +28,6 @@ const categoryEmojis = {
 
 const getEmoji = (catName) => categoryEmojis[catName] || '🏷️'
 
-// Formatowanie daty z YYYY-MM-DD (lub ISO) na DD-MM-YYYY
 const formatDate = (rawDate) => {
   if (!rawDate) return ''
   const d = new Date(rawDate)
@@ -91,10 +87,7 @@ const categoryColors = {
 
 const getCategoryColor = (category) => {
   const catName = typeof category === 'object' ? category.name : category
-  
-  if (categoryColors[catName]) {
-    return categoryColors[catName]
-  }
+  if (categoryColors[catName]) return categoryColors[catName]
 
   let hash = 0
   const name = catName || 'Inne'
@@ -107,7 +100,7 @@ const getCategoryColor = (category) => {
 
 onMounted(async () => {
   try {
-    const { data } = await axios.get('http://127.0.0.1:8000/api/categories/')
+    const { data } = await api.get('categories/')
     categories.value = data.map(c => c.name)
   } catch (e) {
     console.error("Błąd pobierania kategorii", e)
@@ -115,10 +108,9 @@ onMounted(async () => {
 })
 
 const deleteExpense = async (id) => {
-  if (!confirm("Na pewno chcesz usunąć ten wydatek?")) return;
-  
+  if (!confirm("Na pewno chcesz usunąć ten wydatek?")) return
   try {
-    await axios.delete(`http://127.0.0.1:8000/api/expenses/${id}/`)
+    await api.delete(`expenses/${id}/`)
     emit('refresh-expenses')
   } catch (e) {
     alert("Wystąpił błąd podczas usuwania.")
@@ -126,13 +118,10 @@ const deleteExpense = async (id) => {
   }
 }
 
-// Inteligentne rozróżnienie edycji pod ikoną ołówka ✏️
 const handleEditClick = (expense) => {
   if (expense.items && expense.items.length > 0) {
-    // Wydatek zeskanowany -> otwieramy modal z pozycjami paragonu
     openReceiptDetails(expense)
   } else {
-    // Wydatek dodany ręcznie -> włączamy edycję na kafelku
     expense.isEditing = true
     expense.editName = expense.name
     expense.editAmount = expense.amount
@@ -142,7 +131,7 @@ const handleEditClick = (expense) => {
 
 const saveExpense = async (expense) => {
   try {
-    await axios.patch(`http://127.0.0.1:8000/api/expenses/${expense.id}/`, {
+    await api.patch(`expenses/${expense.id}/`, {
       name: expense.editName,
       amount: expense.editAmount,
       category: expense.editCategory
@@ -155,12 +144,9 @@ const saveExpense = async (expense) => {
   }
 }
 
-// Otwieranie modalu ze szczegółami paragonu
 const openReceiptDetails = (expense) => {
   const cloned = JSON.parse(JSON.stringify(expense))
-  
   cloned.items = cloned.items.map(item => {
-    // Sprawdzamy czy w nazwie był wcześniej napis (½) i czyścimy go, ustawiając split na true
     const hasHalvesInName = item.name.includes('(½)')
     const cleanName = item.name.replace(/\s*\(½\)/g, '').trim()
     const isSplit = item.split || hasHalvesInName
@@ -169,7 +155,6 @@ const openReceiptDetails = (expense) => {
       ...item,
       name: cleanName,
       split: isSplit,
-      // Jeśli nazwa miała (½), podwajamy kwotę w inpucie, by pokazać bazową cenę
       amount: hasHalvesInName ? Number((item.amount * 2).toFixed(2)) : item.amount
     }
   })
@@ -178,12 +163,10 @@ const openReceiptDetails = (expense) => {
   showReceiptModal.value = true
 }
 
-// Zapis zmian w pozycjach paragonu
 const saveReceiptItems = async () => {
   try {
     const preparedItems = activeReceipt.value.items.map(item => {
       const origAmount = parseFloat(item.amount) || 0
-      
       return {
         name: item.name.replace(/\s*\(½\)/g, '').trim(),
         amount: parseFloat(origAmount.toFixed(2)),
@@ -192,13 +175,12 @@ const saveReceiptItems = async () => {
       }
     })
 
-    // Sumujemy połówki na potrzeby całkowitej kwoty wydatku
     const newTotal = preparedItems.reduce((sum, item) => {
       const amt = item.amount
       return sum + (item.split ? amt / 2 : amt)
     }, 0)
 
-    await axios.patch(`http://127.0.0.1:8000/api/expenses/${activeReceipt.value.id}/`, {
+    await api.patch(`expenses/${activeReceipt.value.id}/`, {
       items: preparedItems,
       amount: parseFloat(newTotal.toFixed(2))
     })
@@ -270,7 +252,6 @@ const removeReceiptItem = (index) => {
       <p>Brak wydatków w wybranym przedziale czasowym.</p>
     </div>
 
-    <!-- MODAL EDYCJI POZYCJI PARAGONU -->
     <div v-if="showReceiptModal" class="modal-backdrop" @click.self="showReceiptModal = false">
       <div class="modal-card">
         <h3>Szczegóły paragonu: {{ activeReceipt.name }}</h3>
@@ -369,6 +350,7 @@ const removeReceiptItem = (index) => {
 }
 
 .card-header {
+  display: space-between;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -514,7 +496,6 @@ const removeReceiptItem = (index) => {
   font-family: inherit;
 }
 
-/* MODAL DLA SZCZEGÓŁÓW PARAGONU */
 .modal-backdrop {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
@@ -546,7 +527,6 @@ const removeReceiptItem = (index) => {
   text-align: center;
 }
 
-/* STYLIZACJA TABELI WEWNĄTRZ MODALU (IDENTYCZNA JAK W SKANERZE) */
 .table-wrapper {
   max-height: 350px;
   overflow-y: auto;

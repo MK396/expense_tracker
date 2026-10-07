@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import axios from 'axios'
+import api from '../api'
 
 const emit = defineEmits(['expenses-added'])
 
@@ -9,16 +9,14 @@ const isLoading = ref(false)
 const products = ref([])
 const categories = ref([])
 
-// STANY NA METADANE
 const shopName = ref('')
 const shopNip = ref('')
 const totalSum = ref('') 
-const usedModel = ref('') // przechowuje model zwrócony z API
+const usedModel = ref('')
 
-// STAN NA WYBÓR SKANERA (EasyOCR vs Gemini)
-const selectedEndpoint = ref('/api/scan/') 
+// Względne ścieżki zgodne z baseURL z src/api.js
+const selectedEndpoint = ref('scan/') 
 
-// Słownik emotikon dla kategorii
 const categoryEmojis = {
   'Jedzenie': '🍔',
   'Alkohol': '🍷',
@@ -34,7 +32,7 @@ const getEmoji = (catName) => categoryEmojis[catName] || '🏷️'
 
 onMounted(async () => {
   try {
-    const { data } = await axios.get('http://127.0.0.1:8000/api/categories/')
+    const { data } = await api.get('categories/')
     categories.value = data.map(c => c.name)
   } catch (e) {
     console.error("Błąd pobierania kategorii", e)
@@ -61,7 +59,11 @@ const handleFileUpload = async (event) => {
   formData.append('receipt', file)
 
   try {
-    const { data } = await axios.post(`http://127.0.0.1:8000${selectedEndpoint.value}`, formData)
+    const { data } = await api.post(selectedEndpoint.value, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    })
     
     if (data.status === 'success') {
       const scanResult = data.produkty
@@ -94,26 +96,23 @@ const saveSelected = async () => {
     return alert("Wybierz przynajmniej jeden produkt.")
   }
 
-  // Zapisujemy pozycje – podział trzymamy w polu 'split', nie w nazwie!
   const itemsList = selectedProducts.map(p => {
     const originalAmount = parseFloat(p.amount) || 0
-    const finalAmount = p.split ? (originalAmount / 2) : originalAmount
 
     return {
-      name: p.name, // Czysta nazwa bez doklejania "(½)"
-      amount: parseFloat(p.amount), // Pierwotna kwota
+      name: p.name,
+      amount: parseFloat(originalAmount.toFixed(2)),
       category: p.category,
-      split: p.split // Flaga podziału
+      split: p.split
     }
   })
 
-  // Łączny koszt przeliczony pod kątem podziału
   const calculatedTotal = selectedProducts.reduce((sum, p) => {
     const amt = parseFloat(p.amount) || 0
     return sum + (p.split ? amt / 2 : amt)
   }, 0)
 
-  const mainCategory = itemsList[0]?.category || 'Inne'
+  const mainCategory = itemsList[0]?.category || (categories.value[0] || 'Jedzenie')
 
   const expensePayload = {
     name: shopName.value || 'Zakupy (Paragon)',
@@ -124,7 +123,7 @@ const saveSelected = async () => {
   }
 
   try {
-    await axios.post('http://127.0.0.1:8000/api/expenses/', expensePayload)
+    await api.post('expenses/', expensePayload)
     emit('expenses-added')
   } catch (e) {
     alert("Błąd zapisu paragonu. Upewnij się, że kategoria istnieje w bazie.")
@@ -139,28 +138,25 @@ const saveSelected = async () => {
       <h3>Skaner Paragonów</h3>
     </div>
 
-    <!-- SEKCJA ŁADOWANIA -->
     <div v-if="isLoading" class="loading-box">
       <div class="spinner"></div>
       <p class="loading-text">Analizowanie paragonu</p>
     </div>
 
-    <!-- WYSYŁANIE PLIKU -->
     <div v-else class="upload-section">
       <input type="file" ref="fileInput" accept="image/*" style="display: none" @change="handleFileUpload" />
       
       <div class="scan-buttons-grid">
-        <button class="upload-btn" @click="triggerScan('/api/scan/')">
+        <button class="upload-btn" @click="triggerScan('scan/')">
           Skanuj (EasyOCR - Lokalnie)
         </button>
 
-        <button class="upload-btn btn-gemini" @click="triggerScan('/api/scan-gemini/')">
+        <button class="upload-btn btn-gemini" @click="triggerScan('scan-gemini/')">
           Skanuj (Gemini AI - Chmura)
         </button>
       </div>
     </div>
 
-    <!-- WYNIKI SKANOWANIA -->
     <div v-if="products.length > 0" class="results-section">
       <div class="metadata-box">
         <div class="meta-item">
@@ -229,7 +225,6 @@ const saveSelected = async () => {
 </template>
 
 <style scoped>
-/* GŁÓWNY POJEMNIK W STYLU KAFELKA PODSUMOWANIA */
 .scanner-card {
   background: var(--accent-text);
   padding: 1.5rem;
@@ -259,7 +254,6 @@ const saveSelected = async () => {
   font-weight: 700;
 }
 
-/* PRZYCISKI SKANOWANIA */
 .scan-buttons-grid {
   display: flex;
   flex-direction: column;
@@ -289,7 +283,6 @@ const saveSelected = async () => {
   border: 1px solid var(--accent);
 }
 
-/* SEKCJA ŁADOWANIA */
 .loading-box {
   display: flex;
   flex-direction: column;
@@ -322,7 +315,6 @@ const saveSelected = async () => {
   100% { transform: rotate(360deg); }
 }
 
-/* METADANE */
 .results-section {
   display: flex;
   flex-direction: column;
@@ -364,7 +356,6 @@ const saveSelected = async () => {
   font-weight: 800;
 }
 
-/* TABELA DANYCH */
 .table-wrapper {
   max-height: 350px;
   overflow-y: auto;
@@ -447,7 +438,6 @@ const saveSelected = async () => {
   transform: scale(1.1);
 }
 
-/* PRZYCISK ZAPISU */
 .submit-btn {
   background-color: var(--accent);
   color: var(--accent-text);
