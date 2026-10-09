@@ -1,31 +1,95 @@
 import os
-import sys
 from pathlib import Path
+
+from django.conf import settings
+from django.contrib.auth.models import User
 from django.core.files.storage import default_storage
-from rest_framework import generics, status
+from rest_framework import generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework import generics, permissions
-from django.contrib.auth.models import User
-from .serializers import RegisterSerializer
+from rest_framework.views import APIView
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
-from .models import Expense, Category
-from .serializers import ExpenseSerializer, CategorySerializer
+from ocr.easyocr_processor import analizuj_paragon_dla_api
 from ocr.gemini_processor import analizuj_paragon_gemini
 
-# Dodajemy folder główny do ścieżki, aby Django widziało moduł 'ocr'
-BASE_DIR = Path(__file__).resolve().parent.parent
-sys.path.append(str(BASE_DIR))
-from ocr.easyocr_processor import analizuj_paragon_dla_api
+from .models import Category, Expense
+from .serializers import (
+    CategorySerializer,
+    ExpenseSerializer,
+    RegisterSerializer,
+)
 
+
+# ==========================================
+# UWIERZYTELNIANIE Z CIASTECZKAMI (HttpOnly)
+# ==========================================
+
+class CookieTokenObtainPairView(TokenObtainPairView):
+    """
+    Logowanie: Zwraca access_token w JSON, a refresh_token umieszcza
+    w bezpiecznym ciasteczku HttpOnly niedostępnym dla skryptów JS.
+    """
+    def post(self, request, *args, **kwargs):
+        response = super().post(request, *args, **kwargs)
+        if response.status_code == status.HTTP_200_OK:
+            refresh_token = response.data.pop('refresh', None)
+            if refresh_token:
+                response.set_cookie(
+                    key='refresh_token',
+                    value=refresh_token,
+                    httponly=True,
+                    secure=not settings.DEBUG,  # Wymusza HTTPS na produkcji
+                    samesite='Lax',
+                    path='/api/token/refresh/',  # Wysyłane wyłącznie do endpointu odświeżania
+                    max_age=7 * 24 * 3600       # 7 dni
+                )
+        return response
+
+
+class CookieTokenRefreshView(TokenRefreshView):
+    """
+    Odświeżanie sesji: Odczytuje refresh_token bezpośrednio z ciasteczka HttpOnly.
+    """
+    def post(self, request, *args, **kwargs):
+        refresh_token = request.COOKIES.get('refresh_token')
+        if refresh_token:
+            data = request.data.copy() if hasattr(request.data, 'copy') else {}
+            data['refresh'] = refresh_token
+            serializer = self.get_serializer(data=data)
+            serializer.is_valid(raise_exception=True)
+            return Response(serializer.validated_data, status=status.HTTP_200_OK)
+
+        return super().post(request, *args, **kwargs)
+
+
+class CookieLogoutView(APIView):
+    """
+    Wylogowanie: Usuwa ciasteczko z przeglądarki użytkownika.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        response = Response({"detail": "Wylogowano pomyślnie."}, status=status.HTTP_200_OK)
+        response.delete_cookie('refresh_token', path='/api/token/refresh/')
+        return response
+
+
+class RegisterView(generics.CreateAPIView):
+    queryset = User.objects.all()
+    serializer_class = RegisterSerializer
+    permission_classes = [permissions.AllowAny]
+
+# ==========================================
+# ZARZĄDZANIE WYDATKAMI I KATEGORIAMI
+# ==========================================
 
 class ExpenseListCreateView(generics.ListCreateAPIView):
     serializer_class = ExpenseSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        # Każdy użytkownik widzi TYLKO swoje wydatki
         return Expense.objects.filter(user=self.request.user).order_by('-date')
 
     def get_serializer(self, *args, **kwargs):
@@ -34,11 +98,7 @@ class ExpenseListCreateView(generics.ListCreateAPIView):
         return super().get_serializer(*args, **kwargs)
 
     def perform_create(self, serializer):
-        # Automatyczne przypisanie zalogowanego użytkownika (również przy liście)
-        if isinstance(serializer.validated_data, list):
-            serializer.save(user=self.request.user)
-        else:
-            serializer.save(user=self.request.user)
+        serializer.save(user=self.request.user)
 
 
 class CategoryListCreateView(generics.ListCreateAPIView):
@@ -46,7 +106,6 @@ class CategoryListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        # Każdy użytkownik widzi TYLKO swoje kategorie
         return Category.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
@@ -58,17 +117,15 @@ class ExpenseDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        # Blokada edycji/usunięcia cudzego wydatku
         return Expense.objects.filter(user=self.request.user)
 
-class RegisterView(generics.CreateAPIView):
-    queryset = User.objects.all()
-    serializer_class = RegisterSerializer
-    # Rejestracja musi być publicznie dostępna dla niezalogowanych
-    permission_classes = [permissions.AllowAny]
+
+# ==========================================
+# ENDPOINTY SKANOWANIA PARAGONÓW (OCR)
+# ==========================================
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])  # Zabezpieczenie skanowania
+@permission_classes([IsAuthenticated])
 def scan_receipt(request):
     if 'receipt' not in request.FILES:
         return Response({"error": "Brak pliku na wejściu."}, status=status.HTTP_400_BAD_REQUEST)
@@ -83,13 +140,12 @@ def scan_receipt(request):
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     finally:
-        # Blok finally gwarantuje usunięcie pliku nawet w razie wyjątku
         if os.path.exists(file_path):
             os.remove(file_path)
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])  # Zabezpieczenie skanowania Gemini
+@permission_classes([IsAuthenticated])
 def scan_receipt_gemini(request):
     if 'receipt' not in request.FILES:
         return Response({"error": "Brak pliku na wejściu."}, status=status.HTTP_400_BAD_REQUEST)
@@ -102,8 +158,6 @@ def scan_receipt_gemini(request):
         produkty = analizuj_paragon_gemini(file_path)
         return Response({"status": "success", "produkty": produkty}, status=status.HTTP_200_OK)
     except Exception as e:
-        import traceback
-        traceback.print_exc()
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     finally:
         if os.path.exists(file_path):

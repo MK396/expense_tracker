@@ -1,7 +1,7 @@
 <template>
   <div class="auth-overlay">
     <div class="auth-card">
-      <h2>{{ isRegistering ? 'Załóż nowe konto' : 'Logowanie do Expense Tracker' }}</h2>
+      <h2>{{ isRegistering ? 'Zarejestruj się' : 'Zaloguj się' }}</h2>
       <p class="subtitle">
         {{ isRegistering ? 'Utwórz konto, aby zarządzać swoimi wydatkami' : 'Wprowadź dane, aby uzyskać dostęp do swoich wydatków' }}
       </p>
@@ -13,7 +13,7 @@
             id="username" 
             v-model="username" 
             type="text" 
-            placeholder="np. admin" 
+            placeholder="login"
             required 
             autocomplete="username"
           />
@@ -25,7 +25,7 @@
             id="password" 
             v-model="password" 
             type="password" 
-            placeholder="••••••••" 
+            placeholder="hasło" 
             required 
             autocomplete="current-password"
           />
@@ -50,7 +50,7 @@
 
 <script setup>
 import { ref } from 'vue';
-import api from '../api';
+import api, { setAccessToken } from '../api';
 
 const emit = defineEmits(['login-success']);
 
@@ -78,18 +78,19 @@ const handleSubmit = async () => {
       });
     }
 
-    // 2. Pobranie tokenów JWT (dla logowania lub automatycznie po rejestracji)
+    // 2. Logowanie i pobranie access tokena (refresh_token leci w ciasteczku HttpOnly)
     const res = await api.post('token/', {
       username: username.value,
       password: password.value,
     });
 
-    localStorage.setItem('access_token', res.data.access);
-    localStorage.setItem('refresh_token', res.data.refresh);
+    // Zapisujemy access_token wyłącznie w pamięci modułu api.js
+    setAccessToken(res.data.access);
+
     emit('login-success');
   } catch (err) {
     if (isRegistering.value) {
-      // Obsługa błędów walidacji z Django (np. "Użytkownik o tej nazwie już istnieje")
+      // Obsługa błędów walidacji z Django
       const data = err.response?.data;
       if (data?.username) {
         error.value = Array.isArray(data.username) ? data.username[0] : data.username;
