@@ -24,6 +24,7 @@
           <input 
             id="password" 
             v-model="password" 
+            @input="isLocked = false; error = ''"
             type="password" 
             placeholder="hasło" 
             required 
@@ -31,7 +32,7 @@
           />
         </div>
 
-        <button type="submit" :disabled="loading" class="btn-submit">
+        <button type="submit" :disabled="loading || isLocked" class="btn-submit">
           {{ loading ? 'Przetwarzanie...' : (isRegistering ? 'Zarejestruj się' : 'Zaloguj się') }}
         </button>
 
@@ -59,6 +60,7 @@ const username = ref('');
 const password = ref('');
 const loading = ref(false);
 const error = ref('');
+const isLocked = ref(false);
 
 const toggleMode = () => {
   isRegistering.value = !isRegistering.value;
@@ -71,27 +73,25 @@ const handleSubmit = async () => {
 
   try {
     if (isRegistering.value) {
-      // 1. Rejestracja nowego użytkownika w API
+      // Rejestracja nowego użytkownika
       await api.post('register/', {
         username: username.value,
         password: password.value,
       });
     }
 
-    // 2. Logowanie i pobranie access tokena (refresh_token leci w ciasteczku HttpOnly)
+    // Logowanie
     const res = await api.post('token/', {
       username: username.value,
       password: password.value,
     });
 
-    // Zapisujemy access_token wyłącznie w pamięci modułu api.js
     setAccessToken(res.data.access);
-
     emit('login-success');
   } catch (err) {
+    const data = err.response?.data;
+
     if (isRegistering.value) {
-      // Obsługa błędów walidacji z Django
-      const data = err.response?.data;
       if (data?.username) {
         error.value = Array.isArray(data.username) ? data.username[0] : data.username;
       } else if (data?.password) {
@@ -100,7 +100,15 @@ const handleSubmit = async () => {
         error.value = 'Błąd rejestracji. Sprawdź poprawność danych.';
       }
     } else {
-      error.value = 'Niepoprawny login lub hasło.';
+      // Obsługa błędów logowania i django-axes
+      if (data?.detail) {
+        error.value = data.detail;
+        if (err.response?.status === 429 || data?.is_locked) {
+          isLocked.value = true;
+        }
+      } else {
+        error.value = 'Niepoprawny login lub hasło.';
+      }
     }
   } finally {
     loading.value = false;

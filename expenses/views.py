@@ -1,15 +1,24 @@
 import os
+import math
 from pathlib import Path
 
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.files.storage import default_storage
+from django.utils import timezone
 from rest_framework import generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework.throttling import ScopedRateThrottle
+
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
+
+from axes.models import AccessAttempt
+from axes.helpers import get_client_ip_address
+from axes.utils import reset
 
 from ocr.easyocr_processor import analizuj_paragon_dla_api
 from ocr.gemini_processor import analizuj_paragon_gemini
@@ -23,29 +32,74 @@ from .serializers import (
 
 
 # ==========================================
-# UWIERZYTELNIANIE Z CIASTECZKAMI (HttpOnly)
+# UWIERZYTELNIANIE Z CIASTECZKAMI (HttpOnly) & AXES
 # ==========================================
 
 class CookieTokenObtainPairView(TokenObtainPairView):
     """
-    Logowanie: Zwraca access_token w JSON, a refresh_token umieszcza
-    w bezpiecznym ciasteczku HttpOnly niedostępnym dla skryptów JS.
+    Logowanie: Zwraca access_token w JSON, refresh w HttpOnly,
+    resetuje próby po udanym logowaniu i raportuje stan blokad.
     """
     def post(self, request, *args, **kwargs):
-        response = super().post(request, *args, **kwargs)
-        if response.status_code == status.HTTP_200_OK:
+        serializer = self.get_serializer(data=request.data)
+
+        try:
+            serializer.is_valid(raise_exception=True)
+
+            # --- RESETOWANIE LICZNIKA AXES PO UDANYM LOGOWANIU ---
+            ip = get_client_ip_address(request)
+            username = request.data.get('username')
+            reset(ip=ip, username=username)
+
+            response = Response(serializer.validated_data, status=status.HTTP_200_OK)
             refresh_token = response.data.pop('refresh', None)
             if refresh_token:
                 response.set_cookie(
                     key='refresh_token',
                     value=refresh_token,
                     httponly=True,
-                    secure=not settings.DEBUG,  # Wymusza HTTPS na produkcji
+                    secure=not settings.DEBUG,
                     samesite='Lax',
-                    path='/api/token/refresh/',  # Wysyłane wyłącznie do endpointu odświeżania
-                    max_age=7 * 24 * 3600       # 7 dni
+                    path='/api/token/refresh/',
+                    max_age=7 * 24 * 3600
                 )
-        return response
+            return response
+
+        except Exception:
+            ip = get_client_ip_address(request)
+            username = request.data.get('username')
+
+            limit = getattr(settings, 'AXES_FAILURE_LIMIT', 5)
+            cooloff_hours = getattr(settings, 'AXES_COOLOFF_TIME', 0.25)
+            cooloff_seconds = cooloff_hours * 3600
+
+            attempt = AccessAttempt.objects.filter(ip_address=ip, username=username).first()
+            if not attempt:
+                attempt = AccessAttempt.objects.filter(ip_address=ip).first()
+
+            if attempt:
+                elapsed = (timezone.now() - attempt.attempt_time).total_seconds()
+
+                if attempt.failures_since_start >= limit and elapsed < cooloff_seconds:
+                    remaining_minutes = math.ceil((cooloff_seconds - elapsed) / 60)
+                    return Response({
+                        "detail": f"Zbyt wiele prób logowania. Konto zablokowane na {remaining_minutes} min.",
+                        "is_locked": True,
+                        "remaining_minutes": remaining_minutes
+                    }, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
+                remaining_attempts = max(0, limit - attempt.failures_since_start)
+                return Response({
+                    "detail": f"Niepoprawny login lub hasło. Pozostało prób: {remaining_attempts}.",
+                    "is_locked": False,
+                    "remaining_attempts": remaining_attempts
+                }, status=status.HTTP_401_UNAUTHORIZED)
+
+            return Response({
+                "detail": f"Niepoprawny login lub hasło. Pozostało prób: {limit - 1}.",
+                "is_locked": False,
+                "remaining_attempts": limit - 1
+            }, status=status.HTTP_401_UNAUTHORIZED)
 
 
 class CookieTokenRefreshView(TokenRefreshView):
@@ -80,6 +134,7 @@ class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     serializer_class = RegisterSerializer
     permission_classes = [permissions.AllowAny]
+
 
 # ==========================================
 # ZARZĄDZANIE WYDATKAMI I KATEGORIAMI
@@ -126,7 +181,9 @@ class ExpenseDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([ScopedRateThrottle])
 def scan_receipt(request):
+    request.throttle_scope = 'receipt_scan'
     if 'receipt' not in request.FILES:
         return Response({"error": "Brak pliku na wejściu."}, status=status.HTTP_400_BAD_REQUEST)
 

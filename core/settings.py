@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'corsheaders',
+    'axes',
     'expenses',
 ]
 
@@ -53,6 +54,16 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
+    # --- OGRANICZANIE ZAPYTAŃ (RATE LIMITING) ---
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',  # Dla niezalogowanych (po IP)
+        'rest_framework.throttling.UserRateThrottle',  # Dla zalogowanych (po User ID)
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+            'anon': '30/minute',
+            'user': '60/minute',
+            'receipt_scan': '5/minute',  # Limit na skanowanie OCR
+    },
 }
 
 MIDDLEWARE = [
@@ -65,6 +76,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'axes.middleware.AxesMiddleware',
 ]
 
 CORS_ALLOWED_ORIGINS = os.getenv(
@@ -123,6 +135,11 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+AUTHENTICATION_BACKENDS = [
+    'axes.backends.AxesStandaloneBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
+
 
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
@@ -144,3 +161,38 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+
+# --- Bezpieczeństwo i integracja z Cloudflare ---
+
+# Zaufane źródła dla CSRF (pobierane z .env)
+csrf_origins = os.getenv("CSRF_TRUSTED_ORIGINS", "")
+if csrf_origins:
+    CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in csrf_origins.split(",") if origin.strip()]
+
+# Podstawowa konfiguracja django-axes (dla każdego środowiska)
+AXES_FAILURE_LIMIT = 10         # Blokada po 10 nieudanych próbach
+AXES_COOLOFF_TIME = 0.25        # 15 minut (0.25 godziny)
+AXES_RESET_ON_SUCCESS = True    # Reset licznika po poprawnym zalogowaniu
+
+# Zabezpieczenia aktywne tylko na produkcji (gdy DEBUG = False)
+if not DEBUG:
+    # Wymuszenie HTTPS dla ciasteczek
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SESSION_COOKIE_HTTPONLY = True
+
+    # Nagłówki ochronne
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    X_FRAME_OPTIONS = 'DENY'
+
+    # Informuje Django, że Cloudflare przekazuje ruch HTTPS
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+    # Wymuszenie HTTPS w przeglądarce (HSTS)
+    SECURE_HSTS_SECONDS = 31536000  # 1 rok
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+
+    # Rozpoznawanie IP za podwójnym proxy: Cloudflare -> Nginx -> Django
+    AXES_IP_GETTER = 'axes.ip_getters.reverse_proxy.get_client_ip_address'
+    AXES_PROXY_COUNT = 2
