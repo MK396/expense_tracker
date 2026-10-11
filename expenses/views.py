@@ -20,9 +20,6 @@ from axes.models import AccessAttempt
 from axes.helpers import get_client_ip_address
 from axes.utils import reset
 
-from ocr.easyocr_processor import analizuj_paragon_dla_api
-from ocr.gemini_processor import analizuj_paragon_gemini
-
 from .models import Category, Expense
 from .serializers import (
     CategorySerializer,
@@ -183,6 +180,7 @@ class ExpenseDetailView(generics.RetrieveUpdateDestroyAPIView):
 @permission_classes([IsAuthenticated])
 @throttle_classes([ScopedRateThrottle])
 def scan_receipt(request):
+    from ocr.easyocr_processor import analizuj_paragon_dla_api
     request.throttle_scope = 'receipt_scan'
     if 'receipt' not in request.FILES:
         return Response({"error": "Brak pliku na wejściu."}, status=status.HTTP_400_BAD_REQUEST)
@@ -204,6 +202,7 @@ def scan_receipt(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def scan_receipt_gemini(request):
+    from ocr.gemini_processor import analizuj_paragon_gemini
     if 'receipt' not in request.FILES:
         return Response({"error": "Brak pliku na wejściu."}, status=status.HTTP_400_BAD_REQUEST)
 
