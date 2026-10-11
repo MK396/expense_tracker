@@ -17,13 +17,18 @@ const showAddCategory = ref(false)
 // Słownik emotikon dla kategorii
 const categoryEmojis = {
   'Jedzenie': '🍔',
+  'Restauracje': '🍽️',
   'Alkohol': '🍷',
   'Transport': '🚗',
-  'Dom': '🏠',
+  'Mieszkanie': '🏠',
+  'Wydatki domowe': '🛋️',
+  'Rozrywka': '🎉',
   'Sport': '🏋️',
-  'Restauracje': '🍽️',
+  'Zdrowie i uroda': '💊',
+  'Ubrania': '👕',
   'Edukacja': '📚',
-  'Prezenty': '🎁'
+  'Prezenty': '🎁',
+  'Inne': '📦'
 }
 
 const getEmoji = (catName) => categoryEmojis[catName] || '🏷️'

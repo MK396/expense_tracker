@@ -17,13 +17,18 @@ const activeReceipt = ref(null)
 
 const categoryEmojis = {
   'Jedzenie': '🍔',
+  'Restauracje': '🍽️',
   'Alkohol': '🍷',
   'Transport': '🚗',
-  'Dom': '🏠',
+  'Mieszkanie': '🏠',
+  'Wydatki domowe': '🛋️',
+  'Rozrywka': '🎉',
   'Sport': '🏋️',
-  'Restauracje': '🍽️',
+  'Zdrowie i uroda': '💊',
+  'Ubrania': '👕',
   'Edukacja': '📚',
-  'Prezenty': '🎁'
+  'Prezenty': '🎁',
+  'Inne': '📦'
 }
 
 const getEmoji = (catName) => categoryEmojis[catName] || '🏷️'
@@ -75,11 +80,15 @@ const normalizeShopName = (rawName) => {
 
 const categoryColors = {
   'Jedzenie': '#F8AD9D',
+  'Restauracje': '#F4ACB7',
   'Alkohol': '#FFD166',
   'Transport': '#C77DFF',
-  'Dom': '#B8C0FF',
+  'Mieszkanie': '#B8C0FF',
+  'Wydatki domowe': '#A0C4FF',
+  'Rozrywka': '#FDFFB6',
   'Sport': '#74B9FF',
-  'Restauracje': '#F4ACB7',
+  'Zdrowie i uroda': '#FFC6FF',
+  'Ubrania': '#CAFFBF',
   'Edukacja': '#CBFFC0',
   'Prezenty': '#FFEAA7',
   'Inne': '#D3D3D3'
