@@ -1,6 +1,8 @@
 from django.db import models
 from django.utils import timezone
 from django.contrib.auth.models import User
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 
 class Category(models.Model):
     name = models.CharField(max_length=100)
@@ -32,3 +34,27 @@ class Expense(models.Model):
     def __str__(self):
         cat_name = self.category.name if self.category else "Brak"
         return f"{self.name} - {cat_name}: {self.amount} ({self.date})"
+
+
+# ==========================================
+# AUTOMATYCZNE KATEGORIE DLA NOWYCH KONT
+# ==========================================
+
+DEFAULT_CATEGORIES = [
+    "Jedzenie",
+    "Transport",
+    "Mieszkanie",
+    "Rozrywka",
+    "Zdrowie i uroda",
+    "Edukacja",
+    "Ubrania",
+    "Wydatki domowe",
+    "Prezenty",
+    "Inne",
+]
+
+@receiver(post_save, sender=User)
+def create_default_categories(sender, instance, created, **kwargs):
+    if created:
+        for cat_name in DEFAULT_CATEGORIES:
+            Category.objects.get_or_create(user=instance, name=cat_name)

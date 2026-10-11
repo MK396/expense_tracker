@@ -171,7 +171,7 @@ if csrf_origins:
 
 # Podstawowa konfiguracja django-axes (dla każdego środowiska)
 AXES_FAILURE_LIMIT = 10         # Blokada po 10 nieudanych próbach
-AXES_COOLOFF_TIME = 0.25        # 15 minut (0.25 godziny)
+AXES_COOLOFF_TIME = 0.25       # 15 minut (0.25 godziny)
 AXES_RESET_ON_SUCCESS = True    # Reset licznika po poprawnym zalogowaniu
 
 # Zabezpieczenia aktywne tylko na produkcji (gdy DEBUG = False)
