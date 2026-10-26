@@ -24,6 +24,14 @@ api.interceptors.request.use((config) => {
   if (currentAccessToken && !config.headers.Authorization) {
     config.headers.Authorization = `Bearer ${currentAccessToken}`;
   }
+  // FormData musi mieć Content-Type z boundary — przeglądarka ustawi go sama
+  if (config.data instanceof FormData) {
+    if (typeof config.headers.set === 'function') {
+      config.headers.set('Content-Type', undefined);
+    } else {
+      delete config.headers['Content-Type'];
+    }
+  }
   return config;
 });
 

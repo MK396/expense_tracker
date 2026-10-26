@@ -15,12 +15,15 @@ Aplikacja webowa oparta na **Django** i **Vue 3**, wykorzystująca **EasyOCR** o
 - [Struktura projektu](#struktura-projektu)
 - [Architektura](#architektura)
 - [Skan paragonów](#skan-paragonów)
+- [Tryb gościa](#tryb-gościa)
 
 ---
 
 ## Opis projektu
 
 Użytkownik prowadzi listę wydatków, ogląda podsumowanie wybranego miesiąca i może wgrać zdjęcie paragonu. System odczytuje sklep, pozycje i kwoty — wynik da się poprawić przed zapisem. Każde konto ma własne wydatki i kategorie.
+
+Aplikację można też używać **bez rejestracji** (tryb gościa): dane trzymane są w `localStorage` przeglądarki, a skan paragonów działa przez te same endpointy API z limitami zapytań.
 
 Nowe konto dostaje **10 kategorii**:
 
@@ -43,7 +46,7 @@ Własne kategorie można dodać z formularza wydatku.
 
 ## Funkcjonalności
 
-- **Konta i sesja** — rejestracja, logowanie, ciche odświeżanie tokenu; blokada po 10 nieudanych próbach na 15 minut
+- **Konta i sesja** — rejestracja, logowanie, ciche odświeżanie tokenu; blokada po 10 nieudanych próbach na 15 minut; **tryb gościa** bez logowania
 - **Wydatki** — dodawanie, edycja i usuwanie (nazwa, kwota, data, kategoria); filtr miesiąca i roku
 - **Pozycje paragonu** — podgląd, poprawka, usunięcie i podział na pół; suma wydatku przelicza się od nowa
 - **Podsumowania** — wydatki miesiąca, średnia dzienna, prognoza, największy wydatek i limit budżetu
@@ -60,8 +63,8 @@ Własne kategorie można dodać z formularza wydatku.
 | `GET`, `POST` | `/api/expenses/` | zalogowany | Lista i tworzenie wydatków |
 | `GET`, `PUT`, `PATCH`, `DELETE` | `/api/expenses/<id>/` | zalogowany | Pojedynczy wydatek |
 | `GET`, `POST` | `/api/categories/` | zalogowany | Lista i tworzenie kategorii |
-| `POST` | `/api/scan/` | zalogowany | Skan EasyOCR |
-| `POST` | `/api/scan-gemini/` | zalogowany | Skan Gemini |
+| `POST` | `/api/scan/` | publiczny (rate limit) | Skan EasyOCR |
+| `POST` | `/api/scan-gemini/` | publiczny (rate limit) | Skan Gemini |
 
 Panel Django jest pod ścieżką `/admin-console-67/`.
 
@@ -124,8 +127,10 @@ Expense_tracker/
     ├── vite.config.js
     └── src/
         ├── main.js
-        ├── App.vue                 # Sesja, miesiąc, modale
-        ├── api.js                  # Axios, refresh tokenu
+        ├── App.vue                 # Sesja / gość, miesiąc, modale
+        ├── api.js                  # Axios, refresh tokenu, FormData
+        ├── guestStore.js           # Wydatki i kategorie gościa (localStorage)
+        ├── dataService.js          # API lub localStorage wg trybu
         ├── style.css
         └── components/
             ├── LoginModal.vue
@@ -192,7 +197,9 @@ flowchart TB
 3. Przy odpowiedzi 401 woła odświeżenie i powtarza pierwotne żądanie.
 4. django-axes blokuje logowanie po 10 nieudanych próbach. Adres klienta jest czytany z uwzględnieniem dwóch proxy (Cloudflare i Nginx).
 
-Limity API: 30 żądań na minutę dla anonimowych klientów, 60 dla zalogowanych, 5 na minutę dla skanu EasyOCR.
+Limity API (domyślnie): 30 żądań/min dla anonimowych klientów, 60/min dla zalogowanych; skan EasyOCR **5/min**, skan Gemini **3/min** (liczone po adresie IP lub ID użytkownika).
+
+W developmencie frontend Vite często działa na porcie **5173** lub **5174** — origin musi być w `CORS_ALLOWED_ORIGINS` w pliku `.env` (np. `http://localhost:5174`).
 
 ### Frontend
 
@@ -215,7 +222,7 @@ Kontenery budowane z `Dockerfile` (backend, `python:3.12-slim`, 3 workery) oraz 
 
 ## Skan paragonów
 
-Zdjęcie w polu `receipt` jest zapisywane tymczasowo, przetwarzane i usuwane niezależnie od wyniku. Odpowiedź zawiera NIP, nazwę sklepu, sumę i listę produktów (`name`, `amount`).
+Zdjęcie w polu `receipt` jest zapisywane tymczasowo, przetwarzane i usuwane niezależnie od wyniku. Odpowiedź zawiera NIP, nazwę sklepu, sumę i listę produktów (`name`, `amount`). Endpointy skanu są dostępne **bez JWT**; chroni je rate limiting (patrz [Uwierzytelnianie](#uwierzytelnianie)).
 
 | Silnik | Endpoint | Gdzie liczy | Opis |
 |--------|----------|-------------|------|
@@ -223,3 +230,42 @@ Zdjęcie w polu `receipt` jest zapisywane tymczasowo, przetwarzane i usuwane nie
 | Gemini | `/api/scan-gemini/` | Google Gemini | Model zwraca JSON; opust jest odejmowany od pozycji, której dotyczy |
 
 Przy skanie lokalnym nazwa sklepu pochodzi z pamięci podręcznej (`ocr/ocr_cache.db`) albo z [białej listy VAT](https://wl-api.mf.gov.pl/) Ministerstwa Finansów. Znane sieci (m.in. Biedronka, Lidl, Kaufland) są mapowane na krótką nazwę.
+
+### Gemini — modele i optymalizacja obrazu
+
+W `ocr/gemini_processor.py` używana jest kolejność modeli (pierwszy udany wygrywa):
+
+1. `gemini-3.6-flash`
+2. `gemini-3.5-flash`
+3. `gemini-3.8-flash`
+4. `gemini-flash-latest`
+5. `gemini-3.1-flash-lite`
+
+Przy błędach przejściowych (np. 503, 429) następuje krótka pauza i próba kolejnego modelu. W odpowiedzi API pole `model` wskazuje, który model zadziałał.
+
+Aby przyspieszyć analizę, zdjęcie jest zmniejszane przed wysłaniem do API:
+
+| Miejsce | Plik | Domyślnie |
+|---------|------|-----------|
+| Przeglądarka (tylko ścieżka Gemini) | `ScannerForm.vue` → `compressReceiptImage()` | dłuższy bok max **1600 px**, JPEG jakość **0.85** |
+| Backend | `gemini_processor.py` → `_prepare_receipt_image()` | dłuższy bok max **1600 px** (`GEMINI_MAX_IMAGE_SIDE` w `.env`) |
+
+Wymaga klucza `GEMINI_API_KEY` w `.env`.
+
+Typowy czas odpowiedzi Gemini: ok. **3–15 s** (zależy od rozmiaru zdjęcia, obciążenia API i liczby prób modeli).
+
+---
+
+## Tryb gościa
+
+Użytkownik może wybrać **„Kontynuuj jako gość”** na ekranie logowania.
+
+| Aspekt | Zachowanie |
+|--------|------------|
+| Przechowywanie | `localStorage`: `guest_expenses`, `guest_categories`, `expense_auth_mode=guest` |
+| Logika frontendu | `guestStore.js` + `dataService.js` (te same komponenty co po logowaniu) |
+| Skan paragonów | Tak — wynik zapisywany lokalnie jak ręczny wydatek |
+| API wydatków / kategorii | Bez tokenu — tylko tryb gościa w UI; zapis po stronie przeglądarki |
+| Po zalogowaniu | Widoczne dane z serwera; dane gościa zostają w przeglądarce do kolejnej sesji gościa |
+
+Dane gościa **nie znikają po zamknięciu przeglądarki** (chyba że użytkownik wyczyści dane strony lub używa trybu prywatnego). **Nie ma synchronizacji** między urządzeniami ani automatycznego przenoszenia wydatków gościa na konto po rejestracji.

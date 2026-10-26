@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '../api'
+import { listCategories, createExpense } from '../dataService'
 
 const emit = defineEmits(['expenses-added'])
 
@@ -37,7 +38,7 @@ const getEmoji = (catName) => categoryEmojis[catName] || '🏷️'
 
 onMounted(async () => {
   try {
-    const { data } = await api.get('categories/')
+    const data = await listCategories()
     categories.value = data.map(c => c.name)
   } catch (e) {
     console.error("Błąd pobierania kategorii", e)
@@ -47,6 +48,44 @@ onMounted(async () => {
 const triggerScan = (endpoint) => {
   selectedEndpoint.value = endpoint
   fileInput.value.click()
+}
+
+/** Zmniejsza zdjęcie przed uploadem — szybszy transfer i analiza Gemini */
+const compressReceiptImage = (file, maxSide = 1600, quality = 0.85) => {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      let { width, height } = img
+      const longest = Math.max(width, height)
+      if (longest > maxSide) {
+        const scale = maxSide / longest
+        width = Math.round(width * scale)
+        height = Math.round(height * scale)
+      }
+      const canvas = document.createElement('canvas')
+      canvas.width = width
+      canvas.height = height
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height)
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            reject(new Error('Nie udało się skompresować zdjęcia'))
+            return
+          }
+          resolve(new File([blob], 'receipt.jpg', { type: 'image/jpeg' }))
+        },
+        'image/jpeg',
+        quality
+      )
+    }
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error('Nie udało się odczytać zdjęcia'))
+    }
+    img.src = url
+  })
 }
 
 const handleFileUpload = async (event) => {
@@ -60,33 +99,50 @@ const handleFileUpload = async (event) => {
   totalSum.value = ''
   usedModel.value = ''
 
+  let uploadFile = file
+  if (selectedEndpoint.value.includes('gemini')) {
+    try {
+      uploadFile = await compressReceiptImage(file)
+    } catch (e) {
+      console.warn('Kompresja zdjęcia nie powiodła się, wysyłam oryginał:', e)
+    }
+  }
+
   const formData = new FormData()
-  formData.append('receipt', file)
+  formData.append('receipt', uploadFile)
 
   try {
-    const { data } = await api.post(selectedEndpoint.value, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
-    })
-    
+    // Nie ustawiaj ręcznie Content-Type — axios doda boundary dla FormData
+    const { data } = await api.post(selectedEndpoint.value, formData)
+
     if (data.status === 'success') {
-      const scanResult = data.produkty
-      
-      shopName.value = scanResult.sklep
-      shopNip.value = scanResult.nip
-      totalSum.value = scanResult.suma_calkowita 
+      const scanResult = data.produkty || {}
+      const rawProducts = Array.isArray(scanResult.produkty) ? scanResult.produkty : []
+
+      shopName.value = scanResult.sklep || ''
+      shopNip.value = scanResult.nip || ''
+      totalSum.value = scanResult.suma_calkowita || ''
       if (data.model) usedModel.value = data.model
 
-      products.value = scanResult.produkty.map(p => ({
+      products.value = rawProducts.map(p => ({
         ...p,
         selected: true,
         split: false,
         category: categories.value.length > 0 ? categories.value[0] : ''
       }))
+
+      if (rawProducts.length === 0) {
+        alert('Skan zakończony, ale nie rozpoznano produktów. Spróbuj innego zdjęcia lub modelu.')
+      }
     }
   } catch (error) {
-    alert("Wystąpił błąd podczas analizy paragonu.")
+    if (error.response?.status === 429) {
+      alert('Limit skanowań wyczerpany. Spróbuj ponownie za chwilę.')
+    } else if (!error.response) {
+      alert('Brak odpowiedzi z API (CORS lub sieć). Sprawdź, czy frontend ma dozwolony origin.')
+    } else {
+      alert('Wystąpił błąd podczas analizy paragonu.')
+    }
     console.error(error)
   } finally {
     isLoading.value = false
@@ -128,10 +184,10 @@ const saveSelected = async () => {
   }
 
   try {
-    await api.post('expenses/', expensePayload)
+    await createExpense(expensePayload)
     emit('expenses-added')
   } catch (e) {
-    alert("Błąd zapisu paragonu. Upewnij się, że kategoria istnieje w bazie.")
+    alert("Błąd zapisu paragonu. Upewnij się, że kategoria istnieje.")
     console.error(e)
   }
 }

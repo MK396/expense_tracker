@@ -14,7 +14,7 @@ from pathlib import Path
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=True)
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -62,7 +62,8 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
             'anon': '30/minute',
             'user': '60/minute',
-            'receipt_scan': '5/minute',  # Limit na skanowanie OCR
+            'receipt_scan': '5/minute',         # EasyOCR — gość (IP) i zalogowany
+            'receipt_scan_gemini': '3/minute',  # Gemini — droższy, ciaśniejszy limit
     },
 }
 
@@ -79,10 +80,15 @@ MIDDLEWARE = [
     'axes.middleware.AxesMiddleware',
 ]
 
-CORS_ALLOWED_ORIGINS = os.getenv(
-    "CORS_ALLOWED_ORIGINS",
-    "http://localhost:5173,http://127.0.0.1:5173"
-).split(",")
+CORS_ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv(
+        "CORS_ALLOWED_ORIGINS",
+        "http://localhost:5173,http://127.0.0.1:5173,"
+        "http://localhost:5174,http://127.0.0.1:5174"
+    ).split(",")
+    if origin.strip()
+]
 
 CORS_ALLOW_CREDENTIALS = True
 

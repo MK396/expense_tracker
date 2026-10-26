@@ -8,11 +8,11 @@ from django.core.files.storage import default_storage
 from django.utils import timezone
 from rest_framework import generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
-from rest_framework.throttling import ScopedRateThrottle
+from rest_framework.throttling import SimpleRateThrottle
 
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
 
@@ -176,12 +176,35 @@ class ExpenseDetailView(generics.RetrieveUpdateDestroyAPIView):
 # ENDPOINTY SKANOWANIA PARAGONÓW (OCR)
 # ==========================================
 
+class ReceiptScanThrottle(SimpleRateThrottle):
+    """Limit skanów EasyOCR — po IP (gość) lub user id (zalogowany)."""
+    scope = 'receipt_scan'
+
+    def get_cache_key(self, request, view):
+        if request.user and request.user.is_authenticated:
+            ident = request.user.pk
+        else:
+            ident = self.get_ident(request)
+        return self.cache_format % {'scope': self.scope, 'ident': ident}
+
+
+class ReceiptScanGeminiThrottle(SimpleRateThrottle):
+    """Limit skanów Gemini — po IP (gość) lub user id (zalogowany)."""
+    scope = 'receipt_scan_gemini'
+
+    def get_cache_key(self, request, view):
+        if request.user and request.user.is_authenticated:
+            ident = request.user.pk
+        else:
+            ident = self.get_ident(request)
+        return self.cache_format % {'scope': self.scope, 'ident': ident}
+
+
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
-@throttle_classes([ScopedRateThrottle])
+@permission_classes([AllowAny])
+@throttle_classes([ReceiptScanThrottle])
 def scan_receipt(request):
     from ocr.easyocr_processor import analizuj_paragon_dla_api
-    request.throttle_scope = 'receipt_scan'
     if 'receipt' not in request.FILES:
         return Response({"error": "Brak pliku na wejściu."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -200,7 +223,8 @@ def scan_receipt(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
+@throttle_classes([ReceiptScanGeminiThrottle])
 def scan_receipt_gemini(request):
     from ocr.gemini_processor import analizuj_paragon_gemini
     if 'receipt' not in request.FILES:
@@ -212,7 +236,11 @@ def scan_receipt_gemini(request):
 
     try:
         produkty = analizuj_paragon_gemini(file_path)
-        return Response({"status": "success", "produkty": produkty}, status=status.HTTP_200_OK)
+        model = produkty.pop("_model", None)
+        return Response(
+            {"status": "success", "produkty": produkty, "model": model},
+            status=status.HTTP_200_OK,
+        )
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     finally:

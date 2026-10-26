@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import api from '../api'
+import { listCategories, createCategory, createExpense } from '../dataService'
 
 const emit = defineEmits(['expense-added'])
 
@@ -33,12 +33,11 @@ const categoryEmojis = {
 
 const getEmoji = (catName) => categoryEmojis[catName] || '🏷️'
 
-// 1. Pobieranie kategorii z API
 const fetchCategories = async () => {
   try {
-    const { data } = await api.get('categories/')
+    const data = await listCategories()
     categories.value = data.map(cat => cat.name)
-    
+
     if (categories.value.length > 0 && !category.value) {
       category.value = categories.value[0]
     }
@@ -47,25 +46,22 @@ const fetchCategories = async () => {
   }
 }
 
-// 2. Dodawanie nowej kategorii do bazy danych Django
 const addNewCategory = async () => {
   const trimmed = newCategoryName.value.trim()
   if (trimmed && !categories.value.includes(trimmed)) {
     try {
-      await api.post('categories/', { name: trimmed })
-      
+      await createCategory(trimmed)
       categories.value.push(trimmed)
-      category.value = trimmed 
+      category.value = trimmed
       newCategoryName.value = ''
       showAddCategory.value = false
     } catch (error) {
       console.error("Błąd zapisu kategorii:", error)
-      alert("Nie udało się zapisać nowej kategorii na serwerze.")
+      alert("Nie udało się zapisać nowej kategorii.")
     }
   }
 }
 
-// 3. Wysyłanie wydatku
 const handleSubmit = async () => {
   if (!name.value || !amount.value || !category.value) {
     return alert("Wypełnij wszystkie pola, w tym kategorię!")
@@ -80,13 +76,13 @@ const handleSubmit = async () => {
   }
 
   try {
-    await api.post('expenses/', newExpense)
+    await createExpense(newExpense)
     name.value = ''
     amount.value = ''
     emit('expense-added')
   } catch (error) {
     console.error("Błąd podczas dodawania wydatku:", error)
-    alert("Błąd połączenia z serwerem.")
+    alert("Nie udało się dodać wydatku.")
   }
 }
 

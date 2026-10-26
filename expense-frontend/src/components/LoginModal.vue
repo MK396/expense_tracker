@@ -1,9 +1,21 @@
 <template>
-  <div class="auth-overlay">
+  <div class="auth-overlay" @click.self="handleBackdropClick">
     <div class="auth-card">
+      <button
+        v-if="dismissible"
+        type="button"
+        class="btn-close"
+        aria-label="Zamknij"
+        @click="emit('cancel')"
+      >
+        ✕
+      </button>
+
       <h2>{{ isRegistering ? 'Zarejestruj się' : 'Zaloguj się' }}</h2>
       <p class="subtitle">
-        {{ isRegistering ? 'Utwórz konto, aby zarządzać swoimi wydatkami' : 'Wprowadź dane, aby uzyskać dostęp do swoich wydatków' }}
+        {{ isRegistering
+          ? 'Utwórz konto, aby zarządzać swoimi wydatkami'
+          : 'Wprowadź dane, aby uzyskać dostęp do swoich wydatków' }}
       </p>
       
       <form @submit.prevent="handleSubmit">
@@ -45,6 +57,18 @@
           </button>
         </div>
       </form>
+
+      <div v-if="allowGuest" class="guest-section">
+        <div class="divider">
+          <span>lub</span>
+        </div>
+        <button type="button" class="btn-guest" @click="emit('continue-as-guest')">
+          Kontynuuj jako gość
+        </button>
+        <p class="guest-hint">
+          Dane zapiszą się tylko w tej przeglądarce.
+        </p>
+      </div>
     </div>
   </div>
 </template>
@@ -53,7 +77,18 @@
 import { ref } from 'vue';
 import api, { setAccessToken } from '../api';
 
-const emit = defineEmits(['login-success']);
+const props = defineProps({
+  allowGuest: {
+    type: Boolean,
+    default: true,
+  },
+  dismissible: {
+    type: Boolean,
+    default: false,
+  },
+});
+
+const emit = defineEmits(['login-success', 'continue-as-guest', 'cancel']);
 
 const isRegistering = ref(false);
 const username = ref('');
@@ -67,20 +102,24 @@ const toggleMode = () => {
   error.value = '';
 };
 
+const handleBackdropClick = () => {
+  if (props.dismissible) {
+    emit('cancel');
+  }
+};
+
 const handleSubmit = async () => {
   loading.value = true;
   error.value = '';
 
   try {
     if (isRegistering.value) {
-      // Rejestracja nowego użytkownika
       await api.post('register/', {
         username: username.value,
         password: password.value,
       });
     }
 
-    // Logowanie
     const res = await api.post('token/', {
       username: username.value,
       password: password.value,
@@ -100,7 +139,6 @@ const handleSubmit = async () => {
         error.value = 'Błąd rejestracji. Sprawdź poprawność danych.';
       }
     } else {
-      // Obsługa błędów logowania i django-axes
       if (data?.detail) {
         error.value = data.detail;
         if (err.response?.status === 429 || data?.is_locked) {
@@ -129,12 +167,30 @@ const handleSubmit = async () => {
 }
 
 .auth-card {
+  position: relative;
   background: #ffffff;
   padding: 2.5rem;
   border-radius: 12px;
   width: 100%;
   max-width: 400px;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.btn-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  line-height: 1;
+}
+
+.btn-close:hover {
+  color: #475569;
 }
 
 h2 {
@@ -228,5 +284,51 @@ input:focus {
 
 .link-btn:hover {
   color: #1d4ed8;
+}
+
+.guest-section {
+  margin-top: 1.5rem;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  color: #94a3b8;
+  font-size: 0.8rem;
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #e2e8f0;
+}
+
+.btn-guest {
+  width: 100%;
+  padding: 0.75rem;
+  background: #ffffff;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s, border-color 0.2s;
+}
+
+.btn-guest:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+}
+
+.guest-hint {
+  margin: 0.75rem 0 0;
+  font-size: 0.75rem;
+  color: #94a3b8;
+  text-align: center;
+  line-height: 1.4;
 }
 </style>

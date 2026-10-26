@@ -47,7 +47,9 @@ const availableYears = computed(() => {
 
     <div class="actions-container">
       <button @click="emit('toggle-form')" class="add-btn">Dodaj wydatek</button>
-      <button @click="emit('toggle-scanner')" class="scan-btn">Skanuj paragon</button>
+      <button @click="emit('toggle-scanner')" class="scan-btn">
+        Skanuj paragon
+      </button>
     </div>
   </header>
 </template>

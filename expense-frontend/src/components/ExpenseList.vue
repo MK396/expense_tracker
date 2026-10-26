@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import api from '../api'
+import { listCategories, updateExpense, removeExpense } from '../dataService'
 
 const props = defineProps({
   expenses: {
@@ -109,7 +109,7 @@ const getCategoryColor = (category) => {
 
 onMounted(async () => {
   try {
-    const { data } = await api.get('categories/')
+    const data = await listCategories()
     categories.value = data.map(c => c.name)
   } catch (e) {
     console.error("Błąd pobierania kategorii", e)
@@ -119,7 +119,7 @@ onMounted(async () => {
 const deleteExpense = async (id) => {
   if (!confirm("Na pewno chcesz usunąć ten wydatek?")) return
   try {
-    await api.delete(`expenses/${id}/`)
+    await removeExpense(id)
     emit('refresh-expenses')
   } catch (e) {
     alert("Wystąpił błąd podczas usuwania.")
@@ -140,7 +140,7 @@ const handleEditClick = (expense) => {
 
 const saveExpense = async (expense) => {
   try {
-    await api.patch(`expenses/${expense.id}/`, {
+    await updateExpense(expense.id, {
       name: expense.editName,
       amount: expense.editAmount,
       category: expense.editCategory
@@ -189,7 +189,7 @@ const saveReceiptItems = async () => {
       return sum + (item.split ? amt / 2 : amt)
     }, 0)
 
-    await api.patch(`expenses/${activeReceipt.value.id}/`, {
+    await updateExpense(activeReceipt.value.id, {
       items: preparedItems,
       amount: parseFloat(newTotal.toFixed(2))
     })
